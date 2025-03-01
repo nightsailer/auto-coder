@@ -23,6 +23,7 @@ from autocoder.common.code_modification_ranker import CodeModificationRanker
 from autocoder.common import files as FileUtils
 from autocoder.common.printer import Printer
 
+
 class PathAndCode(pydantic.BaseModel):
     path: str
     content: str
@@ -64,7 +65,9 @@ class CodeAutoMergeEditBlock:
             os.unlink(temp_file_path)
             if result.returncode != 0:
                 error_message = result.stdout.strip() or result.stderr.strip()
-                self.printer.print_in_terminal("pylint_check_failed", error_message=error_message)
+                self.printer.print_in_terminal(
+                    "pylint_check_failed", error_message=error_message
+                )
                 return False, error_message
             return True, ""
         except subprocess.CalledProcessError as e:
@@ -74,7 +77,7 @@ class CodeAutoMergeEditBlock:
             return False, error_message
 
     def parse_whole_text(self, text: str) -> List[PathAndCode]:
-        '''
+        """
         从文本中抽取如下格式代码(two_line_mode)：
 
         ```python
@@ -92,7 +95,7 @@ class CodeAutoMergeEditBlock:
         >>>>>>> REPLACE
         ```
 
-        '''
+        """
         HEAD = "<<<<<<< SEARCH"
         DIVIDER = "======="
         UPDATED = ">>>>>>> REPLACE"
@@ -149,51 +152,73 @@ class CodeAutoMergeEditBlock:
                         path = current_editblock_path
                         content = "\n".join(block)
                     block = []
-                    path_and_code_list.append(
-                        PathAndCode(path=path, content=content))
+                    path_and_code_list.append(PathAndCode(path=path, content=content))
             elif start_marker_count > 0:
                 block.append(line)
 
         return path_and_code_list
 
-    def merge_code(self, generate_result: CodeGenerateResult, force_skip_git: bool = False):
+    def merge_code(
+        self, generate_result: CodeGenerateResult, force_skip_git: bool = False
+    ):
         result = self.choose_best_choice(generate_result)
         self._merge_code(result.contents[0], force_skip_git)
         return result
 
-    def choose_best_choice(self, generate_result: CodeGenerateResult) -> CodeGenerateResult:
+    def choose_best_choice(
+        self, generate_result: CodeGenerateResult
+    ) -> CodeGenerateResult:
         if len(generate_result.contents) == 1:
             return generate_result
-        
+
         merge_results = []
-        for content,conversations in zip(generate_result.contents,generate_result.conversations):
+        for content, conversations in zip(
+            generate_result.contents, generate_result.conversations
+        ):
             merge_result = self._merge_code_without_effect(content)
             merge_results.append(merge_result)
 
         # If all merge results are None, return first one
         if all(len(result.failed_blocks) != 0 for result in merge_results):
             self.printer.print_in_terminal("all_merge_results_failed")
-            return CodeGenerateResult(contents=[generate_result.contents[0]], conversations=[generate_result.conversations[0]])
-        
+            return CodeGenerateResult(
+                contents=[generate_result.contents[0]],
+                conversations=[generate_result.conversations[0]],
+            )
+
         # If only one merge result is not None, return that one
-        not_none_indices = [i for i, result in enumerate(merge_results) if len(result.failed_blocks) == 0]
+        not_none_indices = [
+            i
+            for i, result in enumerate(merge_results)
+            if len(result.failed_blocks) == 0
+        ]
         if len(not_none_indices) == 1:
             idx = not_none_indices[0]
             self.printer.print_in_terminal("only_one_merge_result_success")
-            return CodeGenerateResult(contents=[generate_result.contents[idx]], conversations=[generate_result.conversations[idx]])        
+            return CodeGenerateResult(
+                contents=[generate_result.contents[idx]],
+                conversations=[generate_result.conversations[idx]],
+            )
 
         # 最后，如果有多个，那么根据质量排序再返回
         ranker = CodeModificationRanker(self.llm, self.args)
-        ranked_result = ranker.rank_modifications(generate_result,merge_results)        
-         
+        ranked_result = ranker.rank_modifications(generate_result, merge_results)
+
         ## 得到的结果，再做一次合并，第一个通过的返回 , 返回做合并有点重复低效，未来修改。
-        for content,conversations in zip(ranked_result.contents,ranked_result.conversations):
+        for content, conversations in zip(
+            ranked_result.contents, ranked_result.conversations
+        ):
             merge_result = self._merge_code_without_effect(content)
             if not merge_result.failed_blocks:
-                return CodeGenerateResult(contents=[content], conversations=[conversations])
+                return CodeGenerateResult(
+                    contents=[content], conversations=[conversations]
+                )
 
         # 最后保底，但实际不会出现
-        return CodeGenerateResult(contents=[ranked_result.contents[0]], conversations=[ranked_result.conversations[0]])
+        return CodeGenerateResult(
+            contents=[ranked_result.contents[0]],
+            conversations=[ranked_result.conversations[0]],
+        )
 
     @byzerllm.prompt()
     def git_require_msg(self, source_dir: str, error: str) -> str:
@@ -240,7 +265,7 @@ class CodeAutoMergeEditBlock:
                 if in_updated:
                     updates.append(line)
             result.append((edit.path, "\n".join(heads), "\n".join(updates)))
-        return result        
+        return result
 
     def _merge_code_without_effect(self, content: str) -> MergeCodeWithoutEffect:
         """Merge code without any side effects like git operations, linting or file writing.
@@ -273,9 +298,7 @@ class CodeAutoMergeEditBlock:
                         head, existing_content
                     ).get_best_matching_window()
                     if similarity > self.args.editblock_similarity:
-                        new_content = existing_content.replace(
-                            best_window, update, 1
-                        )
+                        new_content = existing_content.replace(best_window, update, 1)
 
                 if new_content != existing_content:
                     file_content_mapping[file_path] = new_content
@@ -283,11 +306,11 @@ class CodeAutoMergeEditBlock:
                     failed_blocks.append((file_path, head, update))
 
         return MergeCodeWithoutEffect(
-            success_blocks=[(path, content)
-                            for path, content in file_content_mapping.items()],
-            failed_blocks=failed_blocks
+            success_blocks=[
+                (path, content) for path, content in file_content_mapping.items()
+            ],
+            failed_blocks=failed_blocks,
         )
-    
 
     def _merge_code(self, content: str, force_skip_git: bool = False):
         file_content = FileUtils.read_file(self.args.file)
@@ -319,8 +342,7 @@ class CodeAutoMergeEditBlock:
                     else existing_content + "\n" + update
                 )
                 if new_content != existing_content:
-                    changes_to_make.append(
-                        (file_path, existing_content, new_content))
+                    changes_to_make.append((file_path, existing_content, new_content))
                     file_content_mapping[file_path] = new_content
                     merged_blocks.append((file_path, head, update, 1))
                     changes_made = True
@@ -331,19 +353,16 @@ class CodeAutoMergeEditBlock:
                         head, existing_content
                     ).get_best_matching_window()
                     if similarity > self.args.editblock_similarity:
-                        new_content = existing_content.replace(
-                            best_window, update, 1)
+                        new_content = existing_content.replace(best_window, update, 1)
                         if new_content != existing_content:
                             changes_to_make.append(
                                 (file_path, existing_content, new_content)
                             )
                             file_content_mapping[file_path] = new_content
-                            merged_blocks.append(
-                                (file_path, head, update, similarity))
+                            merged_blocks.append((file_path, head, update, similarity))
                             changes_made = True
                     else:
-                        unmerged_blocks.append(
-                            (file_path, head, update, similarity))
+                        unmerged_blocks.append((file_path, head, update, similarity))
 
         if unmerged_blocks:
             if self.args.request_id and not self.args.skip_events:
@@ -367,8 +386,10 @@ class CodeAutoMergeEditBlock:
                     ),
                 )
                 return
-            
-            self.printer.print_in_terminal("unmerged_blocks_warning", num_blocks=len(unmerged_blocks))
+
+            self.printer.print_in_terminal(
+                "unmerged_blocks_warning", num_blocks=len(unmerged_blocks)
+            )
             self._print_unmerged_blocks(unmerged_blocks)
             return
 
@@ -377,9 +398,11 @@ class CodeAutoMergeEditBlock:
             if file_path.endswith(".py"):
                 pylint_passed, error_message = self.run_pylint(new_content)
                 if not pylint_passed:
-                    self.printer.print_in_terminal("pylint_file_check_failed", 
-                                                  file_path=file_path, 
-                                                  error_message=error_message)
+                    self.printer.print_in_terminal(
+                        "pylint_file_check_failed",
+                        file_path=file_path,
+                        error_message=error_message,
+                    )
 
         if changes_made and not force_skip_git and not self.args.skip_commit:
             try:
@@ -389,10 +412,10 @@ class CodeAutoMergeEditBlock:
             except Exception as e:
                 self.printer.print_str_in_terminal(
                     self.git_require_msg(source_dir=self.args.source_dir, error=str(e)),
-                    style="red"
+                    style="red",
                 )
                 return
-            
+
         # Now, apply the changes
         for file_path, new_content in file_content_mapping.items():
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -425,22 +448,27 @@ class CodeAutoMergeEditBlock:
             if not force_skip_git and not self.args.skip_commit:
                 try:
                     commit_result = git_utils.commit_changes(
-                        self.args.source_dir, f"auto_coder_{file_name}_{md5}\n{self.args.query}"
+                        self.args.source_dir,
+                        f"{self.args.query}\nauto_coder_{file_name}_{md5}",
                     )
                     git_utils.print_commit_info(commit_result=commit_result)
                 except Exception as e:
                     self.printer.print_str_in_terminal(
-                        self.git_require_msg(source_dir=self.args.source_dir, error=str(e)),
-                        style="red"
+                        self.git_require_msg(
+                            source_dir=self.args.source_dir, error=str(e)
+                        ),
+                        style="red",
                     )
             else:
                 self.print_merged_blocks(merged_blocks)
-            
-            self.printer.print_in_terminal("merge_success", 
-                                         num_files=len(file_content_mapping.keys()),
-                                         num_changes=len(changes_to_make),
-                                         total_blocks=len(codes))
-            
+
+            self.printer.print_in_terminal(
+                "merge_success",
+                num_files=len(file_content_mapping.keys()),
+                num_changes=len(changes_to_make),
+                total_blocks=len(codes),
+            )
+
         else:
             self.printer.print_in_terminal("no_changes_made")
 
@@ -449,19 +477,22 @@ class CodeAutoMergeEditBlock:
         for file_path, head, update, similarity in unmerged_blocks:
             self.printer.print_str_in_terminal(
                 f"\n{self.printer.get_message_from_key_with_format('unmerged_file_path',file_path=file_path)}",
-                style="bold blue"
+                style="bold blue",
             )
             self.printer.print_str_in_terminal(
                 f"\n{self.printer.get_message_from_key_with_format('unmerged_search_block',similarity=similarity)}",
-                style="bold green"
+                style="bold green",
             )
             syntax = Syntax(head, "python", theme="monokai", line_numbers=True)
             self.printer.console.print(Panel(syntax, expand=False))
-            self.printer.print_in_terminal("unmerged_replace_block", style="bold yellow")
+            self.printer.print_in_terminal(
+                "unmerged_replace_block", style="bold yellow"
+            )
             syntax = Syntax(update, "python", theme="monokai", line_numbers=True)
             self.printer.console.print(Panel(syntax, expand=False))
-        self.printer.print_in_terminal("unmerged_blocks_total", num_blocks=len(unmerged_blocks), style="bold red")
-
+        self.printer.print_in_terminal(
+            "unmerged_blocks_total", num_blocks=len(unmerged_blocks), style="bold red"
+        )
 
     def print_merged_blocks(self, merged_blocks: List[tuple]):
         """Print search/replace blocks for user review using rich library"""
@@ -494,6 +525,6 @@ class CodeAutoMergeEditBlock:
                 Syntax(formatted_text, "diff", theme="monokai"),
                 title="Merged Changes",
                 border_style="green",
-                expand=False
+                expand=False,
             )
         )

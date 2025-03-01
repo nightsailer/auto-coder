@@ -1,7 +1,7 @@
 import os
 import difflib
-from autocoder.common import AutoCoderArgs,git_utils
-from typing import List,Union,Tuple
+from autocoder.common import AutoCoderArgs, git_utils
+from typing import List, Union, Tuple
 import pydantic
 import byzerllm
 from autocoder.common.printer import Printer
@@ -19,14 +19,17 @@ from autocoder.common.types import CodeGenerateResult, MergeCodeWithoutEffect
 from autocoder.common.code_modification_ranker import CodeModificationRanker
 from autocoder.common import files as FileUtils
 
+
 class PathAndCode(pydantic.BaseModel):
     path: str
     content: str
 
+
 def safe_abs_path(res):
     "Gives an abs path, which safely returns a full (not 8.3) windows path"
     res = Path(res).resolve()
-    return str(res)    
+    return str(res)
+
 
 def do_replace(fname, content, hunk):
     fname = Path(fname)
@@ -144,7 +147,9 @@ def make_new_lines_explicit(content, hunk):
     if len(new_before) < len(before) * 0.66:
         return hunk
 
-    new_hunk = difflib.unified_diff(new_before, after, n=max(len(new_before), len(after)))
+    new_hunk = difflib.unified_diff(
+        new_before, after, n=max(len(new_before), len(after))
+    )
     new_hunk = list(new_hunk)[3:]
 
     return new_hunk
@@ -152,7 +157,8 @@ def make_new_lines_explicit(content, hunk):
 
 def cleanup_pure_whitespace_lines(lines):
     res = [
-        line if line.strip() else line[-(len(line) - len(line.rstrip("\r\n")))] for line in lines
+        line if line.strip() else line[-(len(line) - len(line.rstrip("\r\n")))]
+        for line in lines
     ]
     return res
 
@@ -329,6 +335,7 @@ def hunk_to_before_after(hunk, lines=False):
 
     return before, after
 
+
 no_match_error = """UnifiedDiffNoMatch: hunk failed to apply!
 
 {path} does not contain lines that match the diff you provided!
@@ -354,17 +361,16 @@ The diff needs to apply to a unique set of lines in {path}!
 {original}```
 """
 
-other_hunks_applied = (
-    "Note: some hunks did apply successfully. See the updated source code shown above.\n\n"
-)
+other_hunks_applied = "Note: some hunks did apply successfully. See the updated source code shown above.\n\n"
+
 
 class CodeAutoMergeDiff:
-    def __init__(self, llm:byzerllm.ByzerLLM,args:AutoCoderArgs):
+    def __init__(self, llm: byzerllm.ByzerLLM, args: AutoCoderArgs):
         self.llm = llm
         self.args = args
         self.printer = Printer()
 
-    def get_edits(self,content:str):        
+    def get_edits(self, content: str):
         # might raise ValueError for malformed ORIG/UPD blocks
         raw_edits = list(find_diffs(content))
 
@@ -379,52 +385,75 @@ class CodeAutoMergeDiff:
 
         return edits
 
-    def merge_code(self, generate_result: CodeGenerateResult, force_skip_git: bool = False):
+    def merge_code(
+        self, generate_result: CodeGenerateResult, force_skip_git: bool = False
+    ):
         result = self.choose_best_choice(generate_result)
         self._merge_code(result.contents[0], force_skip_git)
         return result
 
-    def choose_best_choice(self, generate_result: CodeGenerateResult) -> CodeGenerateResult:
+    def choose_best_choice(
+        self, generate_result: CodeGenerateResult
+    ) -> CodeGenerateResult:
         if len(generate_result.contents) == 1:
             return generate_result
-        
+
         merge_results = []
-        for content,conversations in zip(generate_result.contents,generate_result.conversations):
+        for content, conversations in zip(
+            generate_result.contents, generate_result.conversations
+        ):
             merge_result = self._merge_code_without_effect(content)
             merge_results.append(merge_result)
 
         # If all merge results are None, return first one
         if all(len(result.failed_blocks) != 0 for result in merge_results):
             self.printer.print_in_terminal("all_merge_results_failed")
-            return CodeGenerateResult(contents=[generate_result.contents[0]], conversations=[generate_result.conversations[0]])
-        
+            return CodeGenerateResult(
+                contents=[generate_result.contents[0]],
+                conversations=[generate_result.conversations[0]],
+            )
+
         # If only one merge result is not None, return that one
-        not_none_indices = [i for i, result in enumerate(merge_results) if len(result.failed_blocks) == 0]
+        not_none_indices = [
+            i
+            for i, result in enumerate(merge_results)
+            if len(result.failed_blocks) == 0
+        ]
         if len(not_none_indices) == 1:
             idx = not_none_indices[0]
             self.printer.print_in_terminal("only_one_merge_result_success")
-            return CodeGenerateResult(contents=[generate_result.contents[idx]], conversations=[generate_result.conversations[idx]])        
+            return CodeGenerateResult(
+                contents=[generate_result.contents[idx]],
+                conversations=[generate_result.conversations[idx]],
+            )
 
         # 最后，如果有多个，那么根据质量排序再返回
         ranker = CodeModificationRanker(self.llm, self.args)
-        ranked_result = ranker.rank_modifications(generate_result,merge_results)        
-         
+        ranked_result = ranker.rank_modifications(generate_result, merge_results)
+
         ## 得到的结果，再做一次合并，第一个通过的返回 , 返回做合并有点重复低效，未来修改。
-        for content,conversations in zip(ranked_result.contents,ranked_result.conversations):
+        for content, conversations in zip(
+            ranked_result.contents, ranked_result.conversations
+        ):
             merge_result = self._merge_code_without_effect(content)
             if not merge_result.failed_blocks:
-                return CodeGenerateResult(contents=[content], conversations=[conversations])
+                return CodeGenerateResult(
+                    contents=[content], conversations=[conversations]
+                )
 
         # 最后保底，但实际不会出现
-        return CodeGenerateResult(contents=[ranked_result.contents[0]], conversations=[ranked_result.conversations[0]])
-    
+        return CodeGenerateResult(
+            contents=[ranked_result.contents[0]],
+            conversations=[ranked_result.conversations[0]],
+        )
+
     @byzerllm.prompt(render="jinja2")
-    def git_require_msg(self,source_dir:str,error:str)->str:
-        '''
+    def git_require_msg(self, source_dir: str, error: str) -> str:
+        """
         auto_merge only works for git repositories.
-         
-        Try to use git init in the source directory. 
-        
+
+        Try to use git init in the source directory.
+
         ```shell
         cd {{ source_dir }}
         git init .
@@ -432,8 +461,8 @@ class CodeAutoMergeDiff:
 
         Then try to run auto-coder again.
         Error: {{ error }}
-        '''
-    
+        """
+
     def abs_root_path(self, path):
         if path.startswith(self.args.source_dir):
             return safe_abs_path(Path(path))
@@ -461,10 +490,10 @@ class CodeAutoMergeDiff:
         for path, hunk in uniq:
             full_path = self.abs_root_path(path)
 
-            if not os.path.exists(full_path):            
+            if not os.path.exists(full_path):
                 with open(full_path, "w") as f:
                     f.write("")
-            
+
             content = FileUtils.read_file(full_path)
 
             original, _ = hunk_to_before_after(hunk)
@@ -474,7 +503,9 @@ class CodeAutoMergeDiff:
             except SearchTextNotUnique:
                 errors.append(
                     not_unique_error.format(
-                        path=path, original=original, num_lines=len(original.splitlines())
+                        path=path,
+                        original=original,
+                        num_lines=len(original.splitlines()),
                     )
                 )
                 continue
@@ -482,20 +513,22 @@ class CodeAutoMergeDiff:
             if not content:
                 errors.append(
                     no_match_error.format(
-                        path=path, original=original, num_lines=len(original.splitlines())
+                        path=path,
+                        original=original,
+                        num_lines=len(original.splitlines()),
                     )
                 )
                 continue
 
             # SUCCESS!
             with open(full_path, "w") as f:
-                f.write(content)            
+                f.write(content)
 
         if errors:
             errors = "\n\n".join(errors)
             if len(errors) < len(uniq):
                 errors += other_hunks_applied
-            raise ValueError(errors)    
+            raise ValueError(errors)
 
     def _merge_code_without_effect(self, content: str) -> MergeCodeWithoutEffect:
         """Merge code without any side effects like git operations or file writing.
@@ -505,27 +538,29 @@ class CodeAutoMergeDiff:
         edits = self.get_edits(content)
         file_content_mapping = {}
         failed_blocks = []
-        
+
         for path, hunk in edits:
             full_path = self.abs_root_path(path)
             if not os.path.exists(full_path):
                 _, after = hunk_to_before_after(hunk)
                 file_content_mapping[full_path] = after
                 continue
-                
+
             if full_path not in file_content_mapping:
                 file_content_mapping[full_path] = FileUtils.read_file(full_path)
-            
+
             content = file_content_mapping[full_path]
             new_content = do_replace(full_path, content, hunk)
             if new_content:
                 file_content_mapping[full_path] = new_content
             else:
                 failed_blocks.append((full_path, "\n".join(hunk)))
-                
+
         return MergeCodeWithoutEffect(
-            success_blocks=[(path, content) for path, content in file_content_mapping.items()],
-            failed_blocks=failed_blocks
+            success_blocks=[
+                (path, content) for path, content in file_content_mapping.items()
+            ],
+            failed_blocks=failed_blocks,
         )
 
     def print_edits(self, edits: List[Tuple[str, List[str]]]):
@@ -555,32 +590,41 @@ class CodeAutoMergeDiff:
                 Syntax(formatted_text, "diff", theme="monokai"),
                 title="Edits",
                 border_style="green",
-                expand=False
+                expand=False,
             )
         )
 
-    def _merge_code(self, content: str,force_skip_git:bool=False):        
+    def _merge_code(self, content: str, force_skip_git: bool = False):
         total = 0
-        
+
         file_content = FileUtils.read_file(self.args.file)
-        md5 = hashlib.md5(file_content.encode('utf-8')).hexdigest()
-        # get the file name 
+        md5 = hashlib.md5(file_content.encode("utf-8")).hexdigest()
+        # get the file name
         file_name = os.path.basename(self.args.file)
-        
+
         if not force_skip_git and not self.args.skip_commit:
             try:
-                git_utils.commit_changes(self.args.source_dir, f"auto_coder_pre_{file_name}_{md5}")
-            except Exception as e:            
-                self.printer.print_in_terminal("git_init_required", style="red", source_dir=self.args.source_dir, error=str(e))
-                return            
-       
-        edits = self.get_edits(content)        
-        self.apply_edits(edits)        
+                git_utils.commit_changes(
+                    self.args.source_dir, f"auto_coder_pre_{file_name}_{md5}"
+                )
+            except Exception as e:
+                self.printer.print_in_terminal(
+                    "git_init_required",
+                    style="red",
+                    source_dir=self.args.source_dir,
+                    error=str(e),
+                )
+                return
+
+        edits = self.get_edits(content)
+        self.apply_edits(edits)
 
         self.printer.print_in_terminal("files_merged_total", total=total)
         if not force_skip_git and not self.args.skip_commit:
-            commit_result = git_utils.commit_changes(self.args.source_dir, f"auto_coder_{file_name}_{md5}\n{self.args.query}")
+            commit_result = git_utils.commit_changes(
+                self.args.source_dir, f"{self.args.query}\nauto_coder_{file_name}_{md5}"
+            )
             git_utils.print_commit_info(commit_result=commit_result)
         else:
             # Print edits for review
-            self.print_edits(edits)    
+            self.print_edits(edits)

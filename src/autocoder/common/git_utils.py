@@ -16,10 +16,12 @@ class FileChange(BaseModel):
     before: Optional[str] = None
     after: Optional[str] = None
 
+
 class CommitChangesResult(BaseModel):
     success: bool
     changes: Dict[str, FileChange] = {}
     error_message: Optional[str] = None
+
 
 class CommitResult(BaseModel):
     success: bool
@@ -117,8 +119,11 @@ def revert_changes(repo_path: str, message: str) -> bool:
             )
             return False
 
-        # 通过message定位到commit_hash
-        commit = repo.git.log("--all", f"--grep={message}", "--format=%H", "-n", "1")
+        # 通过message定位到commit_hash,
+        # --grep 默认只搜索第一行 -F 参数将搜索模式视为固定字符串而为正则表达式
+        commit = repo.git.log(
+            "--all", f"--grep={message}", "-F", "--format=%H", "-n", "1"
+        )
         if not commit:
             logger.warning(f"No commit found with message: {message}")
             return False
@@ -170,7 +175,8 @@ def revert_change(repo_path: str, message: str) -> bool:
     repo = get_repo(repo_path)
     if repo is None:
         return False
-    commit = repo.git.log("--all", f"--grep={message}", "--format=%H", "-n", "1")
+    # --grep 默认只搜索第一行 -F 参数将搜索模式视为固定字符串而为正则表达式
+    commit = repo.git.log("--all", f"--grep={message}", "-F", "--format=%H", "-n", "1")
     if commit:
         repo.git.revert(commit, no_edit=True)
         logger.info(f"Reverted changes with commit message: {message}")
@@ -183,90 +189,91 @@ def revert_change(repo_path: str, message: str) -> bool:
 def get_uncommitted_changes(repo_path: str) -> str:
     """
     获取当前仓库未提交的所有变更,并以markdown格式返回详细报告
-    
+
     Args:
         repo_path: Git仓库路径
-        
+
     Returns:
         str: markdown格式的变更报告,包含新增/修改/删除的文件列表及其差异
     """
     repo = get_repo(repo_path)
     if repo is None:
         return "Error: Repository is not initialized."
-        
+
     try:
         # 获取所有变更
         changes = {
-            'new': [],      # 新增的文件
-            'modified': [], # 修改的文件 
-            'deleted': []   # 删除的文件
+            "new": [],  # 新增的文件
+            "modified": [],  # 修改的文件
+            "deleted": [],  # 删除的文件
         }
-        
+
         # 获取未暂存的变更
         diff_index = repo.index.diff(None)
-        
+
         # 获取未追踪的文件
         untracked = repo.untracked_files
-        
+
         # 处理未暂存的变更
         for diff_item in diff_index:
             file_path = diff_item.a_path
-            diff_content = repo.git.diff(None, file_path)            
+            diff_content = repo.git.diff(None, file_path)
             if diff_item.new_file:
-                changes['new'].append((file_path, diff_content))
+                changes["new"].append((file_path, diff_content))
             elif diff_item.deleted_file:
-                changes['deleted'].append((file_path, diff_content))
+                changes["deleted"].append((file_path, diff_content))
             else:
-                changes['modified'].append((file_path, diff_content))
-                
-        # 处理未追踪的文件    
+                changes["modified"].append((file_path, diff_content))
+
+        # 处理未追踪的文件
         for file_path in untracked:
             try:
-                with open(os.path.join(repo_path, file_path), 'r') as f:
+                with open(os.path.join(repo_path, file_path), "r") as f:
                     content = f.read()
-                changes['new'].append((file_path, f'+++ {file_path}\n{content}'))
+                changes["new"].append((file_path, f"+++ {file_path}\n{content}"))
             except Exception as e:
                 logger.error(f"Error reading file {file_path}: {e}")
-                
+
         # 生成markdown报告
         report = ["# Git Changes Report\n"]
-        
+
         # 新增文件
-        if changes['new']:
+        if changes["new"]:
             report.append("\n## New Files")
-            for file_path, diff in changes['new']:
+            for file_path, diff in changes["new"]:
                 report.append(f"\n### {file_path}")
                 report.append("```diff")
                 report.append(diff)
                 report.append("```")
-                
-        # 修改的文件        
-        if changes['modified']:
+
+        # 修改的文件
+        if changes["modified"]:
             report.append("\n## Modified Files")
-            for file_path, diff in changes['modified']:
+            for file_path, diff in changes["modified"]:
                 report.append(f"\n### {file_path}")
                 report.append("```diff")
                 report.append(diff)
                 report.append("```")
-                
+
         # 删除的文件
-        if changes['deleted']:
+        if changes["deleted"]:
             report.append("\n## Deleted Files")
-            for file_path, diff in changes['deleted']:
+            for file_path, diff in changes["deleted"]:
                 report.append(f"\n### {file_path}")
                 report.append("```diff")
                 report.append(diff)
                 report.append("```")
-                
+
         # 如果没有任何变更
         if not any(changes.values()):
             return "No uncommitted changes found."
-            
+
         return "\n".join(report)
-        
+
     except GitCommandError as e:
         logger.error(f"Error getting uncommitted changes: {e}")
         return f"Error: {str(e)}"
+
 
 @byzerllm.prompt()
 def generate_commit_message(changes_report: str) -> str:
@@ -278,7 +285,7 @@ def generate_commit_message(changes_report: str) -> str:
 
     下面是一些示例：
     <examples>
-    <example>    
+    <example>
     ## New Files
     ###  notebooks/tests/test_long_context_rag_answer_question.ipynb
     ```diff
@@ -430,11 +437,11 @@ def generate_commit_message(changes_report: str) -> str:
         """
         Converts DOCX files to Markdown. Style information (e.g.m headings) and tables are preserved where possible.
         """
-    +    
+    +
     +    def __init__(self):
     +        self._image_counter = 0
     +        super().__init__()
-    
+
         def _save_image(self, image, output_dir: str) -> str:
             """
     -        保存图片并返回相对路径
@@ -443,14 +450,14 @@ def generate_commit_message(changes_report: str) -> str:
             # 获取图片内容和格式
             image_content = image.open()
             image_format = image.content_type.split('/')[-1] if image.content_type else 'png'
-            
+
     -        # 生成唯一文件名
     -        image_filename = f"image_{hash(image_content.read())}.{image_format}"
     -        image_content.seek(0)  # 重置文件指针
     +        # 增加计数器并生成文件名
     +        self._image_counter += 1
     +        image_filename = f"image_{self._image_counter}.{image_format}"
-            
+
             # 保存图片
             image_path = os.path.join(output_dir, image_filename)
     ```
@@ -475,13 +482,13 @@ def generate_commit_message(changes_report: str) -> str:
     from autocoder.common import AutoCoderArgs
     import byzerllm
     +from autocoder.utils.queue_communicate import queue_communicate, CommunicateEvent, CommunicateEventType
-    
-    
+
+
     class CodeAutoGenerate:
     @@ -146,6 +147,15 @@ class CodeAutoGenerate:
         ) -> Tuple[str, Dict[str, str]]:
             llm_config = {"human_as_model": self.args.human_as_model}
-    
+
     +        if self.args.request_id and not self.args.skip_events:
     +            queue_communicate.send_event_no_wait(
     +                request_id=self.args.request_id,
@@ -495,7 +502,7 @@ def generate_commit_message(changes_report: str) -> str:
                 init_prompt = self.single_round_instruction.prompt(
                     instruction=query, content=source_content, context=self.args.context
     @@ -162,6 +172,16 @@ class CodeAutoGenerate:
-    
+
             t = self.llm.chat_oai(conversations=conversations, llm_config=llm_config)
             conversations.append({"role": "assistant", "content": t[0].output})
     +
@@ -509,7 +516,7 @@ def generate_commit_message(changes_report: str) -> str:
     +            )
     +
             return [t[0].output], conversations
-    
+
         def multi_round_run(
     diff --git a/src/autocoder/common/code_auto_generate_diff.py b/src/autocoder/common/code_auto_generate_diff.py
     index 79a9e8d4..37f191a1 100644
@@ -520,13 +527,13 @@ def generate_commit_message(changes_report: str) -> str:
     from autocoder.common import AutoCoderArgs
     import byzerllm
     +from autocoder.utils.queue_communicate import queue_communicate, CommunicateEvent, CommunicateEventType
-    
-    
+
+
     class CodeAutoGenerateDiff:
     @@ -289,6 +290,15 @@ class CodeAutoGenerateDiff:
         ) -> Tuple[str, Dict[str, str]]:
             llm_config = {"human_as_model": self.args.human_as_model}
-    
+
     +        if self.args.request_id and not self.args.skip_events:
     +            queue_communicate.send_event_no_wait(
     +                request_id=self.args.request_id,
@@ -540,7 +547,7 @@ def generate_commit_message(changes_report: str) -> str:
                 instruction=query, content=source_content, context=self.args.context
             )
     @@ -300,6 +310,16 @@ class CodeAutoGenerateDiff:
-    
+
             t = self.llm.chat_oai(conversations=conversations, llm_config=llm_config)
             conversations.append({"role": "assistant", "content": t[0].output})
     +
@@ -554,7 +561,7 @@ def generate_commit_message(changes_report: str) -> str:
     +            )
     +
             return [t[0].output], conversations
-    
+
         def multi_round_run(
     diff --git a/src/autocoder/common/code_auto_generate_strict_diff.py b/src/autocoder/common/code_auto_generate_strict_diff.py
     index 8874ae7a..91409c44 100644
@@ -565,13 +572,13 @@ def generate_commit_message(changes_report: str) -> str:
     from autocoder.common import AutoCoderArgs
     import byzerllm
     +from autocoder.utils.queue_communicate import queue_communicate, CommunicateEvent, CommunicateEventType
-    
-    
+
+
     class CodeAutoGenerateStrictDiff:
     @@ -260,6 +261,15 @@ class CodeAutoGenerateStrictDiff:
         ) -> Tuple[str, Dict[str, str]]:
             llm_config = {"human_as_model": self.args.human_as_model}
-    
+
     +        if self.args.request_id and not self.args.skip_events:
     +            queue_communicate.send_event_no_wait(
     +                request_id=self.args.request_id,
@@ -585,7 +592,7 @@ def generate_commit_message(changes_report: str) -> str:
                 instruction=query, content=source_content, context=self.args.context
             )
     @@ -271,6 +281,16 @@ class CodeAutoGenerateStrictDiff:
-    
+
             t = self.llm.chat_oai(conversations=conversations, llm_config=llm_config)
             conversations.append({"role": "assistant", "content": t[0].output})
     +
@@ -599,7 +606,7 @@ def generate_commit_message(changes_report: str) -> str:
     +            )
     +
             return [t[0].output], conversations
-    
+
         def multi_round_run(
     ```
 
@@ -608,17 +615,20 @@ def generate_commit_message(changes_report: str) -> str:
     参考 @src/autocoder/common/code_auto_merge_editblock.py 中CODE_GENERATE_START,CODE_GENERATE_END 事件, 在其他文件里添加也添加这些事件. 注意,只需要修改 single_round_run 方法.
     </example>
     </examples>
-    
+
     下面是变更报告：
-    {{ changes_report }}    
+    {{ changes_report }}
 
     请输出commit message, 不要输出任何其他内容.
     '''
 
+
 def get_commit_by_message(repo_path: str, message: str):
     repo = get_repo(repo_path)
     try:
-        commit_hash = repo.git.log("--all", f"--grep={message}", "--format=%H", "-n", "1")
+        commit_hash = repo.git.log(
+            "--all", f"--grep={message}", "--format=%H", "-n", "1"
+        )
         if not commit_hash:
             return None
         return repo.commit(commit_hash.strip())
@@ -626,14 +636,15 @@ def get_commit_by_message(repo_path: str, message: str):
         logger.error(f"Error finding commit: {e}")
         return None
 
+
 def get_changes_by_commit_message(repo_path: str, message: str) -> CommitChangesResult:
     """
     根据提交信息查找对应的变更内容
-    
+
     Args:
         repo_path: Git仓库路径
         message: 提交信息
-        
+
     Returns:
         CommitChangesResult: 包含变更前后内容的字典，键为文件路径
     """
@@ -643,21 +654,23 @@ def get_changes_by_commit_message(repo_path: str, message: str) -> CommitChanges
         else:
             repo = get_repo(os.getcwd())
         commit = get_commit_by_message(repo_path, message)
-        
+
         if not commit:
             return CommitChangesResult(success=False, error_message="Commit not found")
 
         changes = {}
-        
+
         # 比较当前commit与其父commit的差异
         for diff_item in commit.parents[0].diff(commit):
             file_path = diff_item.a_path if diff_item.a_path else diff_item.b_path
-            
+
             # 获取变更前内容
             before_content = None
             try:
                 if diff_item.a_blob:
-                    before_content = repo.git.show(f"{commit.parents[0].hexsha}:{file_path}")
+                    before_content = repo.git.show(
+                        f"{commit.parents[0].hexsha}:{file_path}"
+                    )
             except GitCommandError:
                 pass  # 文件可能是新增的
 
@@ -670,9 +683,7 @@ def get_changes_by_commit_message(repo_path: str, message: str) -> CommitChanges
                 pass  # 文件可能被删除
 
             changes[file_path] = FileChange(
-                file_path=file_path,
-                before=before_content,
-                after=after_content
+                file_path=file_path, before=before_content, after=after_content
             )
 
         return CommitChangesResult(success=True, changes=changes)
@@ -681,22 +692,34 @@ def get_changes_by_commit_message(repo_path: str, message: str) -> CommitChanges
         logger.error(f"Error retrieving changes: {e}")
         return CommitChangesResult(success=False, error_message=str(e))
     except IndexError:
-        return CommitChangesResult(success=False, error_message="Initial commit has no parent")
+        return CommitChangesResult(
+            success=False, error_message="Initial commit has no parent"
+        )
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return CommitChangesResult(success=False, error_message=str(e))
 
+
 def print_commit_info(commit_result: CommitResult):
     console = Console()
     table = Table(
-        title="Commit Information (Use /revert to revert this commit)", show_header=True, header_style="bold magenta"
+        title="Commit Information (Use /revert to revert this commit)",
+        show_header=True,
+        header_style="bold magenta",
     )
     table.add_column("Attribute", style="cyan", no_wrap=True)
     table.add_column("Value", style="green")
 
     table.add_row("Commit Hash", commit_result.commit_hash)
     table.add_row("Commit Message", commit_result.commit_message)
-    table.add_row("Changed Files", "\n".join(commit_result.changed_files) if commit_result.changed_files else "No files changed")
+    table.add_row(
+        "Changed Files",
+        (
+            "\n".join(commit_result.changed_files)
+            if commit_result.changed_files
+            else "No files changed"
+        ),
+    )
 
     console.print(
         Panel(table, expand=False, border_style="green", title="Git Commit Summary")

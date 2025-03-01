@@ -39,23 +39,37 @@ import git
 from autocoder.common import git_utils
 from autocoder.chat_auto_coder_lang import get_message
 from autocoder.agent.auto_guess_query import AutoGuessQuery
-from autocoder.common.mcp_server import get_mcp_server, McpRequest, McpInstallRequest, McpRemoveRequest, McpListRequest, McpListRunningRequest, McpRefreshRequest
+from autocoder.common.mcp_server import (
+    get_mcp_server,
+    McpRequest,
+    McpInstallRequest,
+    McpRemoveRequest,
+    McpListRequest,
+    McpListRunningRequest,
+    McpRefreshRequest,
+)
 import byzerllm
 from byzerllm.utils import format_str_jinja2
-from autocoder.common.memory_manager import get_global_memory_file_paths 
+from autocoder.common.memory_manager import get_global_memory_file_paths
 from autocoder import models as models_module
 import shlex
 from autocoder.utils.llms import get_single_llm
 import pkg_resources
 from autocoder.common.printer import Printer
 from autocoder.utils.thread_utils import run_in_raw_thread
-from autocoder.common.command_completer import CommandCompleter,FileSystemModel as CCFileSystemModel,MemoryConfig as CCMemoryModel
+from autocoder.common.command_completer import (
+    CommandCompleter,
+    FileSystemModel as CCFileSystemModel,
+    MemoryConfig as CCMemoryModel,
+)
 from autocoder.common.conf_validator import ConfigValidator
+
 
 class SymbolItem(BaseModel):
     symbol_name: str
     symbol_type: SymbolType
     file_name: str
+
 
 class InitializeSystemRequest(BaseModel):
     product_mode: str
@@ -100,7 +114,7 @@ commands = [
     "/index/build",
     "/index/export",
     "/index/import",
-    "/exclude_files",        
+    "/exclude_files",
     "/help",
     "/shell",
     "/voice_input",
@@ -117,9 +131,11 @@ commands = [
     "/exclude_dirs",
 ]
 
+
 def load_tokenizer():
     from autocoder.rag.variable_holder import VariableHolder
-    from tokenizers import Tokenizer    
+    from tokenizers import Tokenizer
+
     try:
         tokenizer_path = pkg_resources.resource_filename(
             "autocoder", "data/tokenizer.json"
@@ -151,12 +167,10 @@ def configure_project_type():
         print_formatted_text(HTML(f"<info>{escape(text)}</info>"), style=style)
 
     def print_warning(text):
-        print_formatted_text(
-            HTML(f"<warning>{escape(text)}</warning>"), style=style)
+        print_formatted_text(HTML(f"<warning>{escape(text)}</warning>"), style=style)
 
     def print_header(text):
-        print_formatted_text(
-            HTML(f"<header>{escape(text)}</header>"), style=style)
+        print_formatted_text(HTML(f"<header>{escape(text)}</header>"), style=style)
 
     print_header(f"\n=== {get_message('project_type_config')} ===\n")
     print_info(get_message("project_type_supports"))
@@ -184,9 +198,10 @@ def configure_project_type():
     return project_type
 
 
-def initialize_system(args:InitializeSystemRequest):
+def initialize_system(args: InitializeSystemRequest):
     from autocoder.utils.model_provider_selector import ModelProviderSelector
     from autocoder import models as models_module
+
     print(f"\n\033[1;34m{get_message('initializing')}\033[0m")
 
     first_time = [False]
@@ -202,12 +217,11 @@ def initialize_system(args:InitializeSystemRequest):
         else:
             print(f"  {message}")
 
-    def init_project():        
+    def init_project():
         if not os.path.exists(".auto-coder"):
             first_time[0] = True
             print_status(get_message("not_initialized"), "warning")
-            init_choice = input(
-                f"  {get_message('init_prompt')}").strip().lower()
+            init_choice = input(f"  {get_message('init_prompt')}").strip().lower()
             if init_choice == "y":
                 try:
                     subprocess.run(
@@ -224,8 +238,7 @@ def initialize_system(args:InitializeSystemRequest):
 
         if not os.path.exists(base_persist_dir):
             os.makedirs(base_persist_dir, exist_ok=True)
-            print_status(get_message("created_dir").format(
-                base_persist_dir), "success")
+            print_status(get_message("created_dir").format(base_persist_dir), "success")
 
         if first_time[0]:
             configure_project_type()
@@ -236,21 +249,26 @@ def initialize_system(args:InitializeSystemRequest):
     init_project()
 
     if not args.skip_provider_selection and first_time[0]:
-        if args.product_mode == "lite":                    
+        if args.product_mode == "lite":
             ## 如果已经是配置过的项目，就无需再选择
             if first_time[0]:
-                if not models_module.check_model_exists("v3_chat") or not models_module.check_model_exists("r1_chat"):
+                if not models_module.check_model_exists(
+                    "v3_chat"
+                ) or not models_module.check_model_exists("r1_chat"):
                     model_provider_selector = ModelProviderSelector()
                     model_provider_info = model_provider_selector.select_provider()
                     if model_provider_info is not None:
-                        models_json_list = model_provider_selector.to_models_json(model_provider_info)
-                        models_module.add_and_activate_models(models_json_list)              
+                        models_json_list = model_provider_selector.to_models_json(
+                            model_provider_info
+                        )
+                        models_module.add_and_activate_models(models_json_list)
 
         if args.product_mode == "pro":
             # Check if Ray is running
             print_status(get_message("checking_ray"), "")
             ray_status = subprocess.run(
-                ["ray", "status"], capture_output=True, text=True)
+                ["ray", "status"], capture_output=True, text=True
+            )
             if ray_status.returncode != 0:
                 print_status(get_message("ray_not_running"), "warning")
                 try:
@@ -312,7 +330,6 @@ def initialize_system(args:InitializeSystemRequest):
                 print_status(get_message("deploy_fail"), "error")
                 return
 
-
             deploy_cmd = [
                 "byzerllm",
                 "deploy",
@@ -355,7 +372,7 @@ def initialize_system(args:InitializeSystemRequest):
                 print_status(get_message("manual_start"), "warning")
                 print_status("easy-byzerllm chat v3_chat 你好", "")
 
-            print_status(get_message("init_complete_final"), "success")  
+            print_status(get_message("init_complete_final"), "success")
             configure_success[0] = True
 
     if first_time[0] and args.product_mode == "pro" and configure_success[0]:
@@ -363,9 +380,13 @@ def initialize_system(args:InitializeSystemRequest):
         configure(f"chat_model:r1_chat", skip_print=True)
         configure(f"generate_rerank_model:r1_chat", skip_print=True)
         configure(f"code_model:v3_chat", skip_print=True)
-        configure(f"index_filter_model:r1_chat", skip_print=True)  
+        configure(f"index_filter_model:r1_chat", skip_print=True)
 
-    if first_time[0] and args.product_mode == "lite" and models_module.check_model_exists("v3_chat"):
+    if (
+        first_time[0]
+        and args.product_mode == "lite"
+        and models_module.check_model_exists("v3_chat")
+    ):
         configure(f"model:v3_chat", skip_print=True)
         configure(f"chat_model:r1_chat", skip_print=True)
         configure(f"generate_rerank_model:r1_chat", skip_print=True)
@@ -410,8 +431,7 @@ def get_all_file_in_project_with_dot() -> List[str]:
     for root, dirs, files in os.walk(project_root, followlinks=True):
         dirs[:] = [d for d in dirs if d not in final_exclude_dirs]
         for file in files:
-            file_names.append(os.path.join(
-                root, file).replace(project_root, "."))
+            file_names.append(os.path.join(root, file).replace(project_root, "."))
     return file_names
 
 
@@ -508,13 +528,16 @@ def configure(conf: str, skip_print=False):
         if not value:
             printer.print_in_terminal("config_value_empty", style="red")
             return
-        product_mode = memory["conf"].get("product_mode",None)  
+        product_mode = memory["conf"].get("product_mode", None)
         if product_mode:
-            ConfigValidator.validate(key, value, product_mode)    
+            ConfigValidator.validate(key, value, product_mode)
         memory["conf"][key] = value
         save_memory()
         if not skip_print:
-            printer.print_in_terminal("config_set_success", style="green", key=key, value=value)
+            printer.print_in_terminal(
+                "config_set_success", style="green", key=key, value=value
+            )
+
 
 # word_completer = WordCompleter(commands)
 
@@ -524,7 +547,7 @@ def get_symbol_list() -> List[SymbolItem]:
     index_file = os.path.join(".auto-coder", "index.json")
 
     if os.path.exists(index_file):
-        with open(index_file, "r",encoding="utf-8") as file:
+        with open(index_file, "r", encoding="utf-8") as file:
             index_data = json.load(file)
     else:
         index_data = {}
@@ -561,12 +584,14 @@ def get_symbol_list() -> List[SymbolItem]:
 
 
 def save_memory():
-    with open(os.path.join(base_persist_dir, "memory.json"), "w",encoding="utf-8") as f:
+    with open(
+        os.path.join(base_persist_dir, "memory.json"), "w", encoding="utf-8"
+    ) as f:
         json.dump(memory, f, indent=2, ensure_ascii=False)
     load_memory()
 
 
-def load_memory():    
+def load_memory():
     global memory
     memory_path = os.path.join(base_persist_dir, "memory.json")
     if os.path.exists(memory_path):
@@ -574,70 +599,82 @@ def load_memory():
             memory = json.load(f)
     completer.update_current_files(memory["current_files"]["files"])
 
+
 def get_memory():
     global memory
     return memory
 
 
-completer = CommandCompleter(commands,
-                             file_system_model=CCFileSystemModel(project_root=project_root,
-                                                                defaut_exclude_dirs=defaut_exclude_dirs,
-                                                                get_all_file_names_in_project=get_all_file_names_in_project,
-                                                                get_all_file_in_project=get_all_file_in_project,
-                                                                get_all_dir_names_in_project=get_all_dir_names_in_project,
-                                                                get_all_file_in_project_with_dot=get_all_file_in_project_with_dot,
-                                                                get_symbol_list=get_symbol_list
-                                                                ),
-                             memory_model=CCMemoryModel(memory=memory,
-                                                        save_memory_func=save_memory))
+completer = CommandCompleter(
+    commands,
+    file_system_model=CCFileSystemModel(
+        project_root=project_root,
+        defaut_exclude_dirs=defaut_exclude_dirs,
+        get_all_file_names_in_project=get_all_file_names_in_project,
+        get_all_file_in_project=get_all_file_in_project,
+        get_all_dir_names_in_project=get_all_dir_names_in_project,
+        get_all_file_in_project_with_dot=get_all_file_in_project_with_dot,
+        get_symbol_list=get_symbol_list,
+    ),
+    memory_model=CCMemoryModel(memory=memory, save_memory_func=save_memory),
+)
 
 
+def print_conf(content: Dict[str, Any]):
+    """Display configuration dictionary in a Rich table format with enhanced visual styling.
 
+    Args:
+        conf (Dict[str, Any]): Configuration dictionary to display
+    """
+    console = Console()
 
-def print_conf(content:Dict[str,Any]):        
-        """Display configuration dictionary in a Rich table format with enhanced visual styling.
+    # Create a styled table with rounded borders
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        title=get_message("conf_title"),
+        title_style="bold blue",
+        border_style="blue",
+        show_lines=True,
+    )
 
-        Args:
-            conf (Dict[str, Any]): Configuration dictionary to display
-        """
-        console = Console()
+    # Add columns with explicit width and alignment
+    table.add_column(
+        get_message("conf_key"), style="cyan", justify="right", width=30, no_wrap=False
+    )
+    table.add_column(
+        get_message("conf_value"),
+        style="green",
+        justify="left",
+        width=50,
+        no_wrap=False,
+    )
 
-        # Create a styled table with rounded borders
-        table = Table(
-            show_header=True,
-            header_style="bold magenta",
-            title=get_message("conf_title"),
-            title_style="bold blue",
-            border_style="blue",
-            show_lines=True            
-        )
+    # Sort keys for consistent display
+    for key in sorted(content.keys()):
+        value = content[key]
+        # Format value based on type
+        if isinstance(value, (dict, list)):
+            formatted_value = Text(json.dumps(value, indent=2), style="yellow")
+        elif isinstance(value, bool):
+            formatted_value = Text(str(value), style="bright_green" if value else "red")
+        elif isinstance(value, (int, float)):
+            formatted_value = Text(str(value), style="bright_cyan")
+        else:
+            formatted_value = Text(str(value), style="green")
 
-        # Add columns with explicit width and alignment
-        table.add_column(get_message("conf_key"), style="cyan", justify="right", width=30, no_wrap=False)
-        table.add_column(get_message("conf_value"), style="green", justify="left", width=50, no_wrap=False)
+        table.add_row(str(key), formatted_value)
 
-        # Sort keys for consistent display
-        for key in sorted(content.keys()):
-            value = content[key]
-            # Format value based on type
-            if isinstance(value, (dict, list)):
-                formatted_value = Text(json.dumps(value, indent=2), style="yellow")
-            elif isinstance(value, bool):
-                formatted_value = Text(str(value), style="bright_green" if value else "red")
-            elif isinstance(value, (int, float)):
-                formatted_value = Text(str(value), style="bright_cyan")
-            else:
-                formatted_value = Text(str(value), style="green")
-
-            table.add_row(str(key), formatted_value)
-
-        # Add padding and print with a panel
-        console.print(Panel(
+    # Add padding and print with a panel
+    console.print(
+        Panel(
             table,
             padding=(1, 2),
             subtitle=f"[italic]{get_message('conf_subtitle')}[/italic]",
-            border_style="blue"
-        ))
+            border_style="blue",
+        )
+    )
+
 
 def revert():
     result_manager = ResultManager()
@@ -648,28 +685,32 @@ def revert():
         with redirect_stdout() as output:
             auto_coder_main(["revert", "--file", file_path])
         s = output.getvalue()
-        
+
         console = Console()
         panel = Panel(
             Markdown(s),
             title="Revert Result",
             border_style="green" if "Successfully reverted changes" in s else "red",
             padding=(1, 2),
-            expand=False
+            expand=False,
         )
         console.print(panel)
-        
+
         if "Successfully reverted changes" in s:
-            result_manager.append(content=s, meta={"action": "revert","success":False, "input":{                
-            }})
-                        
+            result_manager.append(
+                content=s, meta={"action": "revert", "success": False, "input": {}}
+            )
+
             os.remove(file_path)
         else:
-            result_manager.append(content=s, meta={"action": "revert","success":False, "input":{                
-            }})
+            result_manager.append(
+                content=s, meta={"action": "revert", "success": False, "input": {}}
+            )
     else:
-        result_manager.append(content="No previous chat action found to revert.", meta={"action": "revert","success":False, "input":{                
-            }})        
+        result_manager.append(
+            content="No previous chat action found to revert.",
+            meta={"action": "revert", "success": False, "input": {}},
+        )
 
 
 def add_files(args: List[str]):
@@ -689,30 +730,38 @@ def add_files(args: List[str]):
 
     if not args:
         printer.print_in_terminal("add_files_no_args", style="red")
-        result_manager.append(content=printer.get_message_from_key("add_files_no_args"), 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+        result_manager.append(
+            content=printer.get_message_from_key("add_files_no_args"),
+            meta={"action": "add_files", "success": False, "input": {"args": args}},
+        )
         return
 
     if args[0] == "/refresh":
         completer.refresh_files()
         load_memory()
         console.print(
-            Panel("Refreshed file list.",
-                  title="Files Refreshed", border_style="green")
+            Panel("Refreshed file list.", title="Files Refreshed", border_style="green")
         )
-        result_manager.append(content="Files refreshed.", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+        result_manager.append(
+            content="Files refreshed.",
+            meta={"action": "add_files", "success": True, "input": {"args": args}},
+        )
         return
 
     if args[0] == "/group":
         if len(args) == 1 or (len(args) == 2 and args[1] == "list"):
             if not groups:
                 console.print(
-                    Panel("No groups defined.", title="Groups",
-                          border_style="yellow")
+                    Panel("No groups defined.", title="Groups", border_style="yellow")
                 )
-                result_manager.append(content="No groups defined.", 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+                result_manager.append(
+                    content="No groups defined.",
+                    meta={
+                        "action": "add_files",
+                        "success": False,
+                        "input": {"args": args},
+                    },
+                )
             else:
                 table = Table(
                     title="Defined Groups",
@@ -736,15 +785,20 @@ def add_files(args: List[str]):
                     )
                     table.add_row(
                         group_name,
-                        "\n".join([os.path.relpath(f, project_root)
-                                  for f in files]),
+                        "\n".join([os.path.relpath(f, project_root) for f in files]),
                         query_prefix,
                         is_active,
                         end_section=(i == len(groups) - 1),
                     )
                 console.print(Panel(table, border_style="blue"))
-                result_manager.append(content="Defined groups.", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+                result_manager.append(
+                    content="Defined groups.",
+                    meta={
+                        "action": "add_files",
+                        "success": True,
+                        "input": {"args": args},
+                    },
+                )
         elif len(args) >= 2 and args[1] == "/reset":
             memory["current_files"]["current_groups"] = []
             console.print(
@@ -754,8 +808,10 @@ def add_files(args: List[str]):
                     border_style="green",
                 )
             )
-            result_manager.append(content="Active group names have been reset. If you want to clear the active files, you should use the command /remove_files /all.", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+            result_manager.append(
+                content="Active group names have been reset. If you want to clear the active files, you should use the command /remove_files /all.",
+                meta={"action": "add_files", "success": True, "input": {"args": args}},
+            )
         elif len(args) >= 3 and args[1] == "/add":
             group_name = args[2]
             groups[group_name] = memory["current_files"]["files"].copy()
@@ -766,8 +822,10 @@ def add_files(args: List[str]):
                     border_style="green",
                 )
             )
-            result_manager.append(content=f"Added group '{group_name}' with current files.", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+            result_manager.append(
+                content=f"Added group '{group_name}' with current files.",
+                meta={"action": "add_files", "success": True, "input": {"args": args}},
+            )
 
         elif len(args) >= 3 and args[1] == "/drop":
             group_name = args[2]
@@ -776,8 +834,7 @@ def add_files(args: List[str]):
                 if group_name in groups_info:
                     del memory["current_files"]["groups_info"][group_name]
                 if group_name in memory["current_files"]["current_groups"]:
-                    memory["current_files"]["current_groups"].remove(
-                        group_name)
+                    memory["current_files"]["current_groups"].remove(group_name)
                 console.print(
                     Panel(
                         f"Dropped group '{group_name}'.",
@@ -785,8 +842,14 @@ def add_files(args: List[str]):
                         border_style="green",
                     )
                 )
-                result_manager.append(content=f"Dropped group '{group_name}'.", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+                result_manager.append(
+                    content=f"Dropped group '{group_name}'.",
+                    meta={
+                        "action": "add_files",
+                        "success": True,
+                        "input": {"args": args},
+                    },
+                )
             else:
                 console.print(
                     Panel(
@@ -795,8 +858,14 @@ def add_files(args: List[str]):
                         border_style="red",
                     )
                 )
-                result_manager.append(content=f"Group '{group_name}' not found.", 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+                result_manager.append(
+                    content=f"Group '{group_name}' not found.",
+                    meta={
+                        "action": "add_files",
+                        "success": False,
+                        "input": {"args": args},
+                    },
+                )
         elif len(args) == 3 and args[1] == "/set":
             group_name = args[2]
 
@@ -868,8 +937,14 @@ def add_files(args: List[str]):
                         border_style="red",
                     )
                 )
-                result_manager.append(content=f"Group(s) not found: {', '.join(missing_groups)}", 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+                result_manager.append(
+                    content=f"Group(s) not found: {', '.join(missing_groups)}",
+                    meta={
+                        "action": "add_files",
+                        "success": False,
+                        "input": {"args": args},
+                    },
+                )
 
             if merged_files:
                 memory["current_files"]["files"] = list(merged_files)
@@ -905,8 +980,14 @@ def add_files(args: List[str]):
                         border_style="green",
                     )
                 )
-                result_manager.append(content=f"Active groups: {', '.join(memory['current_files']['current_groups'])}", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+                result_manager.append(
+                    content=f"Active groups: {', '.join(memory['current_files']['current_groups'])}",
+                    meta={
+                        "action": "add_files",
+                        "success": True,
+                        "input": {"args": args},
+                    },
+                )
             elif not missing_groups:
                 console.print(
                     Panel(
@@ -914,9 +995,15 @@ def add_files(args: List[str]):
                         title="No Files Added",
                         border_style="yellow",
                     )
-                    )
-                result_manager.append(content="No files in the specified groups.", 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+                )
+                result_manager.append(
+                    content="No files in the specified groups.",
+                    meta={
+                        "action": "add_files",
+                        "success": False,
+                        "input": {"args": args},
+                    },
+                )
     else:
         existing_files = memory["current_files"]["files"]
         matched_files = find_files_in_project(args)
@@ -938,13 +1025,17 @@ def add_files(args: List[str]):
                         i == len(files_to_add) - 1
                     ),  # 在最后一行之后不添加分割线
                 )
-            console.print(Panel(table, border_style="green"))   
-            result_manager.append(content=f"Added files: {', '.join(files_to_add)}", 
-                              meta={"action": "add_files","success":True, "input":{ "args": args}})
+            console.print(Panel(table, border_style="green"))
+            result_manager.append(
+                content=f"Added files: {', '.join(files_to_add)}",
+                meta={"action": "add_files", "success": True, "input": {"args": args}},
+            )
         else:
             printer.print_in_terminal("add_files_matched", style="yellow")
-            result_manager.append(content=f"No files matched.", 
-                              meta={"action": "add_files","success":False, "input":{ "args": args}})
+            result_manager.append(
+                content=f"No files matched.",
+                meta={"action": "add_files", "success": False, "input": {"args": args}},
+            )
 
     completer.update_current_files(memory["current_files"]["files"])
     save_memory()
@@ -959,8 +1050,14 @@ def remove_files(file_names: List[str]):
         memory["current_files"]["files"] = []
         memory["current_files"]["current_groups"] = []
         printer.print_in_terminal("remove_files_all", style="green")
-        result_manager.append(content="All files removed.", 
-                              meta={"action": "remove_files","success":True, "input":{ "file_names": file_names}})
+        result_manager.append(
+            content="All files removed.",
+            meta={
+                "action": "remove_files",
+                "success": True,
+                "input": {"file_names": file_names},
+            },
+        )
     else:
         removed_files = []
         for file in memory["current_files"]["files"]:
@@ -972,27 +1069,41 @@ def remove_files(file_names: List[str]):
             memory["current_files"]["files"].remove(file)
 
         if removed_files:
-            table = Table(                
-                show_header=True, 
-                header_style="bold magenta"
-            )
+            table = Table(show_header=True, header_style="bold magenta")
             table.add_column("File", style="green")
             for f in removed_files:
                 table.add_row(os.path.relpath(f, project_root))
 
             console = Console()
             console.print(
-                Panel(table, border_style="green",
-                      title=printer.get_message_from_key("files_removed"))) 
-            result_manager.append(content=f"Removed files: {', '.join(removed_files)}", 
-                              meta={"action": "remove_files","success":True, "input":{ "file_names": file_names}})
+                Panel(
+                    table,
+                    border_style="green",
+                    title=printer.get_message_from_key("files_removed"),
+                )
+            )
+            result_manager.append(
+                content=f"Removed files: {', '.join(removed_files)}",
+                meta={
+                    "action": "remove_files",
+                    "success": True,
+                    "input": {"file_names": file_names},
+                },
+            )
         else:
             printer.print_in_terminal("remove_files_none", style="yellow")
-            result_manager.append(content=printer.get_message_from_key("remove_files_none"), 
-                              meta={"action": "remove_files","success":False, "input":{ "file_names": file_names}})
+            result_manager.append(
+                content=printer.get_message_from_key("remove_files_none"),
+                meta={
+                    "action": "remove_files",
+                    "success": False,
+                    "input": {"file_names": file_names},
+                },
+            )
 
     completer.update_current_files(memory["current_files"]["files"])
     save_memory()
+
 
 @run_in_raw_thread()
 def ask(query: str):
@@ -1024,7 +1135,7 @@ def ask(query: str):
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     def execute_ask():
@@ -1072,7 +1183,9 @@ def get_llm_friendly_package_docs(
                                         if return_paths:
                                             docs.append(file_path)
                                         else:
-                                            with open(file_path, "r",encoding="utf-8") as f:
+                                            with open(
+                                                file_path, "r", encoding="utf-8"
+                                            ) as f:
                                                 docs.append(f.read())
 
     return docs
@@ -1082,7 +1195,7 @@ def convert_yaml_to_config(yaml_file: str):
     from autocoder.auto_coder import AutoCoderArgs, load_include_files, Template
 
     args = AutoCoderArgs()
-    with open(yaml_file, "r",encoding="utf-8") as f:
+    with open(yaml_file, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
         config = load_include_files(config, yaml_file)
         for key, value in config.items():
@@ -1094,6 +1207,7 @@ def convert_yaml_to_config(yaml_file: str):
                 setattr(args, key, value)
     return args
 
+
 @run_in_raw_thread()
 def mcp(query: str):
     query = query.strip()
@@ -1103,19 +1217,24 @@ def mcp(query: str):
     # Handle remove command
     if query.startswith("/remove"):
         server_name = query.replace("/remove", "", 1).strip()
-        response = mcp_server.send_request(
-            McpRemoveRequest(server_name=server_name))
+        response = mcp_server.send_request(McpRemoveRequest(server_name=server_name))
         if response.error:
-            printer.print_in_terminal("mcp_remove_error", style="red", error=response.error)
+            printer.print_in_terminal(
+                "mcp_remove_error", style="red", error=response.error
+            )
         else:
-            printer.print_in_terminal("mcp_remove_success", style="green", result=response.result)
+            printer.print_in_terminal(
+                "mcp_remove_success", style="green", result=response.result
+            )
         return
 
     # Handle list command
     if query.startswith("/list_running"):
         response = mcp_server.send_request(McpListRunningRequest())
         if response.error:
-            printer.print_in_terminal("mcp_list_running_error", style="red", error=response.error)
+            printer.print_in_terminal(
+                "mcp_list_running_error", style="red", error=response.error
+            )
         else:
             printer.print_in_terminal("mcp_list_running_title")
             printer.print_str_in_terminal(response.result)
@@ -1125,7 +1244,9 @@ def mcp(query: str):
     if query.startswith("/list"):
         response = mcp_server.send_request(McpListRequest())
         if response.error:
-            printer.print_in_terminal("mcp_list_builtin_error", style="red", error=response.error)
+            printer.print_in_terminal(
+                "mcp_list_builtin_error", style="red", error=response.error
+            )
         else:
             printer.print_in_terminal("mcp_list_builtin_title")
             printer.print_str_in_terminal(response.result)
@@ -1133,10 +1254,12 @@ def mcp(query: str):
 
     # Handle refresh command
     if query.startswith("/refresh"):
-        server_name = query.replace("/refresh", "", 1).strip()    
+        server_name = query.replace("/refresh", "", 1).strip()
         response = mcp_server.send_request(McpRefreshRequest(name=server_name or None))
         if response.error:
-            printer.print_in_terminal("mcp_refresh_error", style="red", error=response.error)
+            printer.print_in_terminal(
+                "mcp_refresh_error", style="red", error=response.error
+            )
         else:
             printer.print_in_terminal("mcp_refresh_success", style="green")
         return
@@ -1148,9 +1271,13 @@ def mcp(query: str):
         response = mcp_server.send_request(request)
 
         if response.error:
-            printer.print_in_terminal("mcp_install_error", style="red", error=response.error)
+            printer.print_in_terminal(
+                "mcp_install_error", style="red", error=response.error
+            )
         else:
-            printer.print_in_terminal("mcp_install_success", style="green", result=response.result)
+            printer.print_in_terminal(
+                "mcp_install_success", style="green", result=response.result
+            )
         return
 
     # Handle default query
@@ -1173,19 +1300,19 @@ def mcp(query: str):
 
     temp_yaml = os.path.join("actions", f"{uuid.uuid4()}.yml")
     try:
-        with open(temp_yaml, "w",encoding="utf-8") as f:
+        with open(temp_yaml, "w", encoding="utf-8") as f:
             f.write(convert_yaml_config_to_str(yaml_config=yaml_config))
         args = convert_yaml_to_config(temp_yaml)
     finally:
         if os.path.exists(temp_yaml):
             os.remove(temp_yaml)
 
-    mcp_server = get_mcp_server()    
+    mcp_server = get_mcp_server()
     response = mcp_server.send_request(
         McpRequest(
             query=query,
             model=args.inference_model or args.model,
-            product_mode=args.product_mode
+            product_mode=args.product_mode,
         )
     )
 
@@ -1195,8 +1322,8 @@ def mcp(query: str):
             text_options={"justify": "left"},
             panel_options={
                 "title": printer.get_message_from_key("mcp_error_title"),
-                "border_style": "red"
-            }
+                "border_style": "red",
+            },
         )
     else:
         # Save conversation
@@ -1216,8 +1343,8 @@ def mcp(query: str):
         console.print(
             Panel(
                 Markdown(markdown_content, justify="left"),
-                title=printer.get_message_from_key('mcp_response_title'),
-                border_style="green"
+                title=printer.get_message_from_key("mcp_response_title"),
+                border_style="green",
             )
         )
 
@@ -1243,7 +1370,7 @@ def code_next(query: str):
 
     temp_yaml = os.path.join("actions", f"{uuid.uuid4()}.yml")
     try:
-        with open(temp_yaml, "w",encoding="utf-8") as f:
+        with open(temp_yaml, "w", encoding="utf-8") as f:
             f.write(convert_yaml_config_to_str(yaml_config=yaml_config))
         args = convert_yaml_to_config(temp_yaml)
     finally:
@@ -1253,8 +1380,7 @@ def code_next(query: str):
     product_mode = conf.get("product_mode", "lite")
     llm = get_single_llm(args.chat_model or args.model, product_mode=product_mode)
 
-    auto_guesser = AutoGuessQuery(
-        llm=llm, project_dir=os.getcwd(), skip_diff=True)
+    auto_guesser = AutoGuessQuery(llm=llm, project_dir=os.getcwd(), skip_diff=True)
 
     predicted_tasks = auto_guesser.predict_next_tasks(
         5, is_human_as_model=args.human_as_model
@@ -1268,25 +1394,20 @@ def code_next(query: str):
     console = Console()
 
     # Create main panel for all predicted tasks
-    table = Table(show_header=True,
-                  header_style="bold magenta", show_lines=True)
+    table = Table(show_header=True, header_style="bold magenta", show_lines=True)
     table.add_column("Priority", style="cyan", width=8)
-    table.add_column("Task Description", style="green",
-                     width=40, overflow="fold")
+    table.add_column("Task Description", style="green", width=40, overflow="fold")
     table.add_column("Files", style="yellow", width=30, overflow="fold")
     table.add_column("Reason", style="blue", width=30, overflow="fold")
-    table.add_column("Dependencies", style="magenta",
-                     width=30, overflow="fold")
+    table.add_column("Dependencies", style="magenta", width=30, overflow="fold")
 
     for task in predicted_tasks:
         # Format file paths to be more readable
-        file_list = "\n".join([os.path.relpath(f, os.getcwd())
-                              for f in task.urls])
+        file_list = "\n".join([os.path.relpath(f, os.getcwd()) for f in task.urls])
 
         # Format dependencies to be more readable
         dependencies = (
-            "\n".join(
-                task.dependency_queries) if task.dependency_queries else "None"
+            "\n".join(task.dependency_queries) if task.dependency_queries else "None"
         )
 
         table.add_row(
@@ -1307,6 +1428,7 @@ def code_next(query: str):
 def commit(query: str):
     conf = memory.get("conf", {})
     product_mode = conf.get("product_mode", "lite")
+
     def prepare_commit_yaml():
         auto_coder_main(["next", "chat_action"])
 
@@ -1332,7 +1454,9 @@ def commit(query: str):
                 "skip_build_index": conf.get("skip_build_index", "true") == "true",
                 "skip_confirm": conf.get("skip_confirm", "true") == "true",
                 "silence": conf.get("silence", "true") == "true",
-                "include_project_structure": conf.get("include_project_structure", "true")
+                "include_project_structure": conf.get(
+                    "include_project_structure", "true"
+                )
                 == "true",
             }
             for key, value in conf.items():
@@ -1344,15 +1468,14 @@ def commit(query: str):
                 return_paths=True
             )
 
-            if conf.get("enable_global_memory", "true") in ["true", "True",True]:
+            if conf.get("enable_global_memory", "true") in ["true", "True", True]:
                 yaml_config["urls"] += get_global_memory_file_paths()
 
             # 临时保存yaml文件，然后读取yaml文件，转换为args
             temp_yaml = os.path.join("actions", f"{uuid.uuid4()}.yml")
             try:
-                with open(temp_yaml, "w",encoding="utf-8") as f:
-                    f.write(convert_yaml_config_to_str(
-                        yaml_config=yaml_config))
+                with open(temp_yaml, "w", encoding="utf-8") as f:
+                    f.write(convert_yaml_config_to_str(yaml_config=yaml_config))
                 args = convert_yaml_to_config(temp_yaml)
             finally:
                 if os.path.exists(temp_yaml):
@@ -1361,37 +1484,48 @@ def commit(query: str):
             target_model = args.commit_model or args.model
             llm = get_single_llm(target_model, product_mode)
             printer = Printer()
-            printer.print_in_terminal("commit_generating", style="yellow", model_name=target_model)
+            printer.print_in_terminal(
+                "commit_generating", style="yellow", model_name=target_model
+            )
             commit_message = ""
 
             try:
                 uncommitted_changes = git_utils.get_uncommitted_changes(".")
                 commit_message = git_utils.generate_commit_message.with_llm(llm).run(
                     uncommitted_changes
-                )                
+                )
                 memory["conversation"].append(
-                    {"role": "user", "content": commit_message})
+                    {"role": "user", "content": commit_message}
+                )
             except Exception as e:
-                printer.print_in_terminal("commit_failed", style="red", error=str(e), model_name=target_model)
+                printer.print_in_terminal(
+                    "commit_failed", style="red", error=str(e), model_name=target_model
+                )
                 return
 
             yaml_config["query"] = commit_message
             yaml_content = convert_yaml_config_to_str(yaml_config=yaml_config)
-            with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+            with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
                 f.write(yaml_content)
 
             file_content = open(execute_file).read()
             md5 = hashlib.md5(file_content.encode("utf-8")).hexdigest()
             file_name = os.path.basename(execute_file)
             commit_result = git_utils.commit_changes(
-                ".", f"auto_coder_{file_name}_{md5}\n{commit_message}"
+                ".", f"{commit_message}\nauto_coder_{file_name}_{md5}"
             )
             git_utils.print_commit_info(commit_result=commit_result)
             if commit_message:
-                printer.print_in_terminal("commit_message", style="green", model_name=target_model, message=commit_message)                
+                printer.print_in_terminal(
+                    "commit_message",
+                    style="green",
+                    model_name=target_model,
+                    message=commit_message,
+                )
         except Exception as e:
             import traceback
-            traceback.print_exc()            
+
+            traceback.print_exc()
             print(f"Failed to commit: {e}")
             if execute_file:
                 os.remove(execute_file)
@@ -1440,7 +1574,7 @@ def coding(query: str):
             "exclude_files": memory.get("exclude_files", []),
         }
 
-        yaml_config["context"] = ""        
+        yaml_config["context"] = ""
         yaml_config["in_code_apply"] = is_apply
 
         for key, value in conf.items():
@@ -1452,7 +1586,7 @@ def coding(query: str):
             return_paths=True
         )
 
-        if conf.get("enable_global_memory", "true") in ["true", "True",True]:
+        if conf.get("enable_global_memory", "true") in ["true", "True", True]:
             yaml_config["urls"] += get_global_memory_file_paths()
 
         # handle image
@@ -1464,8 +1598,7 @@ def coding(query: str):
             active_groups_context = "下面是对上面文件按分组给到的一些描述，当用户的需求正好匹配描述的时候，参考描述来做修改：\n"
             for group in current_groups:
                 group_files = groups.get(group, [])
-                query_prefix = groups_info.get(
-                    group, {}).get("query_prefix", "")
+                query_prefix = groups_info.get(group, {}).get("query_prefix", "")
                 active_groups_context += f"组名: {group}\n"
                 active_groups_context += f"文件列表:\n"
                 for file in group_files:
@@ -1493,7 +1626,7 @@ def coding(query: str):
                 error_message()
                 return
 
-            with open(memory_file, "r",encoding="utf-8") as f:
+            with open(memory_file, "r", encoding="utf-8") as f:
                 chat_history = json.load(f)
 
             if not chat_history["ask_conversation"]:
@@ -1517,16 +1650,21 @@ def coding(query: str):
         md5 = hashlib.md5(yaml_content.encode("utf-8")).hexdigest()
 
         execute_file = os.path.join("actions", latest_yaml_file)
-        with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+        with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
             f.write(yaml_content)
 
         def execute_chat():
             cmd = ["--file", execute_file]
             auto_coder_main(cmd)
             result_manager = ResultManager()
-            result_manager.append(content="", meta={"commit_message": f"auto_coder_{latest_yaml_file}_{md5}","action": "coding", "input":{
-                "query": query
-            }})
+            result_manager.append(
+                content="",
+                meta={
+                    "commit_message": f"auto_coder_{latest_yaml_file}_{md5}",
+                    "action": "coding",
+                    "input": {"query": query},
+                },
+            )
 
         execute_chat()
     else:
@@ -1573,7 +1711,7 @@ def chat(query: str):
         return_paths=True
     )
 
-    if conf.get("enable_global_memory", "true") in ["true", "True",True]:
+    if conf.get("enable_global_memory", "true") in ["true", "True", True]:
         current_files += get_global_memory_file_paths()
 
     yaml_config["urls"] = current_files
@@ -1585,7 +1723,7 @@ def chat(query: str):
     if is_new:
         query = query.replace("/new", "", 1).strip()
 
-    yaml_config["action"] = []    
+    yaml_config["action"] = []
 
     if "/mcp " in query:
         yaml_config["action"].append("mcp")
@@ -1597,11 +1735,11 @@ def chat(query: str):
 
     if "/copy" in query:
         yaml_config["action"].append("copy")
-        query = query.replace("/copy", "", 1).strip()   
+        query = query.replace("/copy", "", 1).strip()
 
     if "/save" in query:
         yaml_config["action"].append("save")
-        query = query.replace("/save", "", 1).strip()        
+        query = query.replace("/save", "", 1).strip()
 
     if "/review" in query and "/commit" in query:
         yaml_config["action"].append("review_commit")
@@ -1609,7 +1747,7 @@ def chat(query: str):
     elif "/learn" in query:
         yaml_config["action"].append("learn_from_commit")
         query = query.replace("/learn", "", 1).strip()
-    else:    
+    else:
         is_review = query.strip().startswith("/review")
         if is_review:
             query = query.replace("/review", "", 1).strip()
@@ -1636,7 +1774,7 @@ def chat(query: str):
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     def execute_ask():
@@ -1660,7 +1798,7 @@ def summon(query: str):
     for file in current_files:
         if os.path.exists(file):
             try:
-                with open(file, "r",encoding="utf-8") as f:
+                with open(file, "r", encoding="utf-8") as f:
                     content = f.read()
                     s = f"##File: {file}\n{content}\n\n"
                     file_contents.append(s)
@@ -1696,7 +1834,7 @@ def summon(query: str):
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     def execute_summon():
@@ -1743,7 +1881,7 @@ def design(query: str):
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     def execute_design():
@@ -1772,7 +1910,7 @@ def voice_input():
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     def execute_voice2text_command():
@@ -1780,7 +1918,9 @@ def voice_input():
 
     try:
         execute_voice2text_command()
-        with open(os.path.join(".auto-coder", "exchange.txt"), "r",encoding="utf-8") as f:
+        with open(
+            os.path.join(".auto-coder", "exchange.txt"), "r", encoding="utf-8"
+        ) as f:
             return f.read()
     finally:
         os.remove(execute_file)
@@ -1802,26 +1942,27 @@ def generate_shell_command(input_text):
 
     execute_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(os.path.join(execute_file), "w",encoding="utf-8") as f:
+    with open(os.path.join(execute_file), "w", encoding="utf-8") as f:
         f.write(yaml_content)
 
     try:
         auto_coder_main(["agent", "generate_command", "--file", execute_file])
-        with open(os.path.join(".auto-coder", "exchange.txt"), "r",encoding="utf-8") as f:
+        with open(
+            os.path.join(".auto-coder", "exchange.txt"), "r", encoding="utf-8"
+        ) as f:
             shell_script = f.read()
         result_manager = ResultManager()
-        result_manager.add_result(content=shell_script,meta={
-            "action": "generate_shell_command",
-            "input": {
-                "query": input_text
-            }
-        })
+        result_manager.add_result(
+            content=shell_script,
+            meta={"action": "generate_shell_command", "input": {"query": input_text}},
+        )
         return shell_script
     finally:
         os.remove(execute_file)
 
+
 def manage_models(query: str):
-    """    
+    """
     Handle /models subcommands:
       /models /list - List all models (default + custom)
       /models /add <name> <api_key> - Add model with simplified params
@@ -1853,7 +1994,7 @@ def manage_models(query: str):
     # alias to /add
     if "/activate" in query:
         subcmd = "/add"
-        query = query.replace("/activate", "", 1).strip()    
+        query = query.replace("/activate", "", 1).strip()
 
     if "/remove" in query:
         subcmd = "/remove"
@@ -1865,7 +2006,7 @@ def manage_models(query: str):
 
     if "/speed_test" in query:
         subcmd = "/speed-test"
-        query = query.replace("/speed_test", "", 1).strip() 
+        query = query.replace("/speed_test", "", 1).strip()
 
     if "input_price" in query:
         subcmd = "/input_price"
@@ -1873,69 +2014,87 @@ def manage_models(query: str):
 
     if "output_price" in query:
         subcmd = "/output_price"
-        query = query.replace("/output_price", "", 1).strip()        
+        query = query.replace("/output_price", "", 1).strip()
 
     if "/speed" in query:
         subcmd = "/speed"
         query = query.replace("/speed", "", 1).strip()
 
-
-
     if not subcmd:
-        printer.print_in_terminal("models_usage")        
+        printer.print_in_terminal("models_usage")
 
     result_manager = ResultManager()
-    if subcmd == "/list":                    
+    if subcmd == "/list":
         if models_data:
             # Sort models by speed (average_speed)
-            sorted_models = sorted(models_data, key=lambda x: float(x.get('average_speed', 0)))
+            sorted_models = sorted(
+                models_data, key=lambda x: float(x.get("average_speed", 0))
+            )
             sorted_models.reverse()
 
             table = Table(
                 title=printer.get_message_from_key("models_title"),
                 expand=True,
-                show_lines=True
+                show_lines=True,
             )
-            table.add_column("Name", style="cyan", width=30, overflow="fold", no_wrap=False)
-            table.add_column("Model Name", style="magenta", width=30, overflow="fold", no_wrap=False)
-            table.add_column("Base URL", style="white", width=40, overflow="fold", no_wrap=False)
-            table.add_column("Input Price (M)", style="magenta", width=15, overflow="fold", no_wrap=False)
-            table.add_column("Output Price (M)", style="magenta", width=15, overflow="fold", no_wrap=False)
-            table.add_column("Speed (s/req)", style="blue", width=15, overflow="fold", no_wrap=False)
+            table.add_column(
+                "Name", style="cyan", width=30, overflow="fold", no_wrap=False
+            )
+            table.add_column(
+                "Model Name", style="magenta", width=30, overflow="fold", no_wrap=False
+            )
+            table.add_column(
+                "Base URL", style="white", width=40, overflow="fold", no_wrap=False
+            )
+            table.add_column(
+                "Input Price (M)",
+                style="magenta",
+                width=15,
+                overflow="fold",
+                no_wrap=False,
+            )
+            table.add_column(
+                "Output Price (M)",
+                style="magenta",
+                width=15,
+                overflow="fold",
+                no_wrap=False,
+            )
+            table.add_column(
+                "Speed (s/req)", style="blue", width=15, overflow="fold", no_wrap=False
+            )
             for m in sorted_models:
                 # Check if api_key_path exists and file exists
-                is_api_key_set = "api_key" in m  
-                name = m.get("name", "")              
+                is_api_key_set = "api_key" in m
+                name = m.get("name", "")
                 if is_api_key_set:
-                    api_key = m.get("api_key", "").strip()                    
-                    if not api_key:                                                
-                        printer.print_in_terminal("models_api_key_empty", style="yellow", name=name)                                           
+                    api_key = m.get("api_key", "").strip()
+                    if not api_key:
+                        printer.print_in_terminal(
+                            "models_api_key_empty", style="yellow", name=name
+                        )
                     name = f"{name} *"
 
                 table.add_row(
-                    name,                    
-                    m.get("model_name", ""),                    
+                    name,
+                    m.get("model_name", ""),
                     m.get("base_url", ""),
                     f"{m.get('input_price', 0.0):.2f}",
                     f"{m.get('output_price', 0.0):.2f}",
-                    f"{m.get('average_speed', 0.0):.3f}"
+                    f"{m.get('average_speed', 0.0):.3f}",
                 )
             console.print(table)
-            result_manager.add_result(content=json.dumps(sorted_models,ensure_ascii=False),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=json.dumps(sorted_models, ensure_ascii=False),
+                meta={"action": "models", "input": {"query": query}},
+            )
 
         else:
             printer.print_in_terminal("models_no_models", style="yellow")
-            result_manager.add_result(content="No models found",meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content="No models found",
+                meta={"action": "models", "input": {"query": query}},
+            )
 
     elif subcmd == "/input_price":
         args = query.strip().split()
@@ -1944,36 +2103,37 @@ def manage_models(query: str):
             try:
                 price = float(args[1])
                 if models_module.update_model_input_price(name, price):
-                    printer.print_in_terminal("models_input_price_updated", style="green", name=name, price=price)
-                    result_manager.add_result(content=f"models_input_price_updated: {name} {price}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_input_price_updated",
+                        style="green",
+                        name=name,
+                        price=price,
+                    )
+                    result_manager.add_result(
+                        content=f"models_input_price_updated: {name} {price}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
                 else:
-                    printer.print_in_terminal("models_not_found", style="red", name=name)
-                    result_manager.add_result(content=f"models_not_found: {name}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_not_found", style="red", name=name
+                    )
+                    result_manager.add_result(
+                        content=f"models_not_found: {name}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
             except ValueError as e:
-                result_manager.add_result(content=f"models_invalid_price: {str(e)}",meta={
-                    "action": "models",
-                    "input": {
-                        "query": query
-                    }
-                })
-                printer.print_in_terminal("models_invalid_price", style="red", error=str(e))
+                result_manager.add_result(
+                    content=f"models_invalid_price: {str(e)}",
+                    meta={"action": "models", "input": {"query": query}},
+                )
+                printer.print_in_terminal(
+                    "models_invalid_price", style="red", error=str(e)
+                )
         else:
-            result_manager.add_result(content=printer.get_message_from_key("models_input_price_usage"),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=printer.get_message_from_key("models_input_price_usage"),
+                meta={"action": "models", "input": {"query": query}},
+            )
             printer.print_in_terminal("models_input_price_usage", style="red")
 
     elif subcmd == "/output_price":
@@ -1983,36 +2143,37 @@ def manage_models(query: str):
             try:
                 price = float(args[1])
                 if models_module.update_model_output_price(name, price):
-                    printer.print_in_terminal("models_output_price_updated", style="green", name=name, price=price)
-                    result_manager.add_result(content=f"models_output_price_updated: {name} {price}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_output_price_updated",
+                        style="green",
+                        name=name,
+                        price=price,
+                    )
+                    result_manager.add_result(
+                        content=f"models_output_price_updated: {name} {price}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
                 else:
-                    printer.print_in_terminal("models_not_found", style="red", name=name)
-                    result_manager.add_result(content=f"models_not_found: {name}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_not_found", style="red", name=name
+                    )
+                    result_manager.add_result(
+                        content=f"models_not_found: {name}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
             except ValueError as e:
-                printer.print_in_terminal("models_invalid_price", style="red", error=str(e))
-                result_manager.add_result(content=f"models_invalid_price: {str(e)}",meta={
-                    "action": "models",
-                    "input": {
-                        "query": query
-                    }
-                })
+                printer.print_in_terminal(
+                    "models_invalid_price", style="red", error=str(e)
+                )
+                result_manager.add_result(
+                    content=f"models_invalid_price: {str(e)}",
+                    meta={"action": "models", "input": {"query": query}},
+                )
         else:
-            result_manager.add_result(content=printer.get_message_from_key("models_output_price_usage"),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=printer.get_message_from_key("models_output_price_usage"),
+                meta={"action": "models", "input": {"query": query}},
+            )
             printer.print_in_terminal("models_output_price_usage", style="red")
 
     elif subcmd == "/speed":
@@ -2022,40 +2183,39 @@ def manage_models(query: str):
             try:
                 speed = float(args[1])
                 if models_module.update_model_speed(name, speed):
-                    printer.print_in_terminal("models_speed_updated", style="green", name=name, speed=speed)
-                    result_manager.add_result(content=f"models_speed_updated: {name} {speed}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_speed_updated", style="green", name=name, speed=speed
+                    )
+                    result_manager.add_result(
+                        content=f"models_speed_updated: {name} {speed}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
                 else:
-                    printer.print_in_terminal("models_not_found", style="red", name=name)
-                    result_manager.add_result(content=f"models_not_found: {name}",meta={
-                        "action": "models",
-                        "input": {
-                            "query": query
-                        }
-                    })
+                    printer.print_in_terminal(
+                        "models_not_found", style="red", name=name
+                    )
+                    result_manager.add_result(
+                        content=f"models_not_found: {name}",
+                        meta={"action": "models", "input": {"query": query}},
+                    )
             except ValueError as e:
-                printer.print_in_terminal("models_invalid_speed", style="red", error=str(e))
-                result_manager.add_result(content=f"models_invalid_speed: {str(e)}",meta={
-                    "action": "models",
-                    "input": {
-                        "query": query
-                    }
-                })
+                printer.print_in_terminal(
+                    "models_invalid_speed", style="red", error=str(e)
+                )
+                result_manager.add_result(
+                    content=f"models_invalid_speed: {str(e)}",
+                    meta={"action": "models", "input": {"query": query}},
+                )
         else:
-            result_manager.add_result(content=printer.get_message_from_key("models_speed_usage"),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=printer.get_message_from_key("models_speed_usage"),
+                meta={"action": "models", "input": {"query": query}},
+            )
             printer.print_in_terminal("models_speed_usage", style="red")
 
     elif subcmd == "/speed-test":
         from autocoder.common.model_speed_test import render_speed_test_in_terminal
+
         test_rounds = 1  # 默认测试轮数
 
         enable_long_context = False
@@ -2072,57 +2232,51 @@ def manage_models(query: str):
         if args and args[0].isdigit():
             test_rounds = int(args[0])
 
-        render_speed_test_in_terminal(product_mode, test_rounds,enable_long_context=enable_long_context)
+        render_speed_test_in_terminal(
+            product_mode, test_rounds, enable_long_context=enable_long_context
+        )
         ## 等待优化，获取明细数据
-        result_manager.add_result(content="models test success",meta={
-            "action": "models",
-            "input": {
-                "query": query
-            }
-        })
+        result_manager.add_result(
+            content="models test success",
+            meta={"action": "models", "input": {"query": query}},
+        )
 
     elif subcmd == "/add":
         # Support both simplified and legacy formats
-        args = query.strip().split(" ")        
+        args = query.strip().split(" ")
         if len(args) == 2:
             # Simplified: /models /add <name> <api_key>
-            name, api_key = args[0], args[1]            
+            name, api_key = args[0], args[1]
             result = models_module.update_model_with_api_key(name, api_key)
             if result:
-                result_manager.add_result(content=f"models_added: {name}",meta={
-                    "action": "models",
-                    "input": {
-                        "query": query
-                    }
-                })
+                result_manager.add_result(
+                    content=f"models_added: {name}",
+                    meta={"action": "models", "input": {"query": query}},
+                )
                 printer.print_in_terminal("models_added", style="green", name=name)
             else:
-                result_manager.add_result(content=f"models_add_failed: {name}",meta={
-                    "action": "models",
-                    "input": {
-                        "query": query
-                    }
-                })
+                result_manager.add_result(
+                    content=f"models_add_failed: {name}",
+                    meta={"action": "models", "input": {"query": query}},
+                )
                 printer.print_in_terminal("models_add_failed", style="red", name=name)
         else:
             printer.print_in_terminal("models_add_usage", style="red")
-            result_manager.add_result(content=printer.get_message_from_key("models_add_usage"),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=printer.get_message_from_key("models_add_usage"),
+                meta={"action": "models", "input": {"query": query}},
+            )
 
     elif subcmd == "/add_model":
-        # Parse key=value pairs: /models /add_model name=abc base_url=http://xx ...       
+        # Parse key=value pairs: /models /add_model name=abc base_url=http://xx ...
         # Collect key=value pairs
         kv_pairs = shlex.split(query)
         data_dict = {}
         for pair in kv_pairs:
-            if '=' not in pair:
+            if "=" not in pair:
                 printer.print_in_terminal("models_add_model_params", style="red")
                 continue
-            k, v = pair.split('=', 1)
+            k, v = pair.split("=", 1)
             data_dict[k.strip()] = v.strip()
 
         # Name is required
@@ -2132,13 +2286,15 @@ def manage_models(query: str):
 
         # Check duplication
         if any(m["name"] == data_dict["name"] for m in models_data):
-            printer.print_in_terminal("models_add_model_exists", style="yellow", name=data_dict["name"])
-            result_manager.add_result(content=printer.get_message_from_key_with_format("models_add_model_exists",name=data_dict["name"]),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            printer.print_in_terminal(
+                "models_add_model_exists", style="yellow", name=data_dict["name"]
+            )
+            result_manager.add_result(
+                content=printer.get_message_from_key_with_format(
+                    "models_add_model_exists", name=data_dict["name"]
+                ),
+                meta={"action": "models", "input": {"query": query}},
+            )
             return
 
         # Create model with defaults
@@ -2149,80 +2305,85 @@ def manage_models(query: str):
             "base_url": data_dict.get("base_url", "https://api.openai.com/v1"),
             "api_key_path": data_dict.get("api_key_path", "api.openai.com"),
             "description": data_dict.get("description", ""),
-            "is_reasoning": data_dict.get("is_reasoning", "false") in ["true", "True", "TRUE", "1"]
+            "is_reasoning": data_dict.get("is_reasoning", "false")
+            in ["true", "True", "TRUE", "1"],
         }
 
         models_data.append(final_model)
         models_module.save_models(models_data)
-        printer.print_in_terminal("models_add_model_success", style="green", name=data_dict["name"])
-        result_manager.add_result(content=f"models_add_model_success: {data_dict['name']}",meta={
-            "action": "models",
-            "input": {
-                "query": query
-            }
-        })
+        printer.print_in_terminal(
+            "models_add_model_success", style="green", name=data_dict["name"]
+        )
+        result_manager.add_result(
+            content=f"models_add_model_success: {data_dict['name']}",
+            meta={"action": "models", "input": {"query": query}},
+        )
 
     elif subcmd == "/remove":
         args = query.strip().split(" ")
         if len(args) < 1:
             printer.print_in_terminal("models_add_usage", style="red")
-            result_manager.add_result(content=printer.get_message_from_key("models_add_usage"),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            result_manager.add_result(
+                content=printer.get_message_from_key("models_add_usage"),
+                meta={"action": "models", "input": {"query": query}},
+            )
             return
         name = args[0]
         filtered_models = [m for m in models_data if m["name"] != name]
         if len(filtered_models) == len(models_data):
-            printer.print_in_terminal("models_add_model_remove", style="yellow", name=name)
-            result_manager.add_result(content=printer.get_message_from_key_with_format("models_add_model_remove",name=name),meta={
-                "action": "models",
-                "input": {
-                    "query": query
-                }
-            })
+            printer.print_in_terminal(
+                "models_add_model_remove", style="yellow", name=name
+            )
+            result_manager.add_result(
+                content=printer.get_message_from_key_with_format(
+                    "models_add_model_remove", name=name
+                ),
+                meta={"action": "models", "input": {"query": query}},
+            )
             return
         models_module.save_models(filtered_models)
         printer.print_in_terminal("models_add_model_removed", style="green", name=name)
-        result_manager.add_result(content=printer.get_message_from_key_with_format("models_add_model_removed",name=name),meta={ 
-            "action": "models",
-            "input": {
-                "query": query
-            }
-        })
+        result_manager.add_result(
+            content=printer.get_message_from_key_with_format(
+                "models_add_model_removed", name=name
+            ),
+            meta={"action": "models", "input": {"query": query}},
+        )
     else:
-        printer.print_in_terminal("models_unknown_subcmd", style="yellow", subcmd=subcmd)
-        result_manager.add_result(content=printer.get_message_from_key_with_format("models_unknown_subcmd",subcmd=subcmd),meta={ 
-            "action": "models",
-            "input": {
-                "query": query
-            }
-        })
+        printer.print_in_terminal(
+            "models_unknown_subcmd", style="yellow", subcmd=subcmd
+        )
+        result_manager.add_result(
+            content=printer.get_message_from_key_with_format(
+                "models_unknown_subcmd", subcmd=subcmd
+            ),
+            meta={"action": "models", "input": {"query": query}},
+        )
+
 
 def exclude_dirs(dir_names: List[str]):
     new_dirs = dir_names
-    existing_dirs = memory.get("exclude_dirs", [])    
+    existing_dirs = memory.get("exclude_dirs", [])
     dirs_to_add = [d for d in new_dirs if d not in existing_dirs]
-    
+
     if dirs_to_add:
         existing_dirs.extend(dirs_to_add)
         if "exclude_dirs" not in memory:
             memory["exclude_dirs"] = existing_dirs
         print(f"Added exclude dirs: {dirs_to_add}")
-        exclude_files([f"regex://.*/{d}/*." for d in dirs_to_add])            
+        exclude_files([f"regex://.*/{d}/*." for d in dirs_to_add])
     else:
         print("All specified dirs are already in the exclude list.")
     save_memory()
     completer.refresh_files()
+
 
 def exclude_files(query: str):
     result_manager = ResultManager()
     printer = Printer()
     if "/list" in query:
         query = query.replace("/list", "", 1).strip()
-        existing_file_patterns = memory.get("exclude_files", []) 
+        existing_file_patterns = memory.get("exclude_files", [])
         console = Console()
         # 打印表格
         table = Table(title="Exclude Files")
@@ -2230,67 +2391,64 @@ def exclude_files(query: str):
         for file_pattern in existing_file_patterns:
             table.add_row(file_pattern)
         console.print(table)
-        result_manager.add_result(content=f"Exclude files: {existing_file_patterns}",meta={
-            "action": "exclude_files",
-            "input": {
-                "query": query
-            }
-        })
+        result_manager.add_result(
+            content=f"Exclude files: {existing_file_patterns}",
+            meta={"action": "exclude_files", "input": {"query": query}},
+        )
         return
 
     if "/drop" in query:
         query = query.replace("/drop", "", 1).strip()
-        existing_file_patterns = memory.get("exclude_files", [])    
+        existing_file_patterns = memory.get("exclude_files", [])
         existing_file_patterns.remove(query.strip())
         memory["exclude_files"] = existing_file_patterns
         save_memory()
         completer.refresh_files()
-        result_manager.add_result(content=f"Dropped exclude files: {query}",meta={
-            "action": "exclude_files",
-            "input": {
-                "query": query
-            }
-        })
+        result_manager.add_result(
+            content=f"Dropped exclude files: {query}",
+            meta={"action": "exclude_files", "input": {"query": query}},
+        )
         return
-    
+
     new_file_patterns = query.strip().split(",")
-    
-    existing_file_patterns = memory.get("exclude_files", [])    
-    file_patterns_to_add = [f for f in new_file_patterns if f not in existing_file_patterns]
+
+    existing_file_patterns = memory.get("exclude_files", [])
+    file_patterns_to_add = [
+        f for f in new_file_patterns if f not in existing_file_patterns
+    ]
 
     for file_pattern in file_patterns_to_add:
-        if not file_pattern.startswith("regex://"): 
-            result_manager.add_result(content=printer.get_message_from_key_with_format("invalid_file_pattern", file_pattern=file_pattern),meta={
-                "action": "exclude_files",
-                "input": {
-                    "query": file_pattern
-                }
-            })
-            raise ValueError(printer.get_message_from_key_with_format("invalid_file_pattern", file_pattern=file_pattern))
+        if not file_pattern.startswith("regex://"):
+            result_manager.add_result(
+                content=printer.get_message_from_key_with_format(
+                    "invalid_file_pattern", file_pattern=file_pattern
+                ),
+                meta={"action": "exclude_files", "input": {"query": file_pattern}},
+            )
+            raise ValueError(
+                printer.get_message_from_key_with_format(
+                    "invalid_file_pattern", file_pattern=file_pattern
+                )
+            )
 
     if file_patterns_to_add:
         existing_file_patterns.extend(file_patterns_to_add)
         if "exclude_files" not in memory:
             memory["exclude_files"] = existing_file_patterns
-        
-        result_manager.add_result(content=f"Added exclude files: {file_patterns_to_add}",meta={
-            "action": "exclude_files",
-            "input": {
-                "query": file_patterns_to_add
-            }
-        })
+
+        result_manager.add_result(
+            content=f"Added exclude files: {file_patterns_to_add}",
+            meta={"action": "exclude_files", "input": {"query": file_patterns_to_add}},
+        )
         save_memory()
         print(f"Added exclude files: {file_patterns_to_add}")
     else:
-        result_manager.add_result(content=f"All specified files are already in the exclude list.",meta={
-            "action": "exclude_files",
-            "input": {
-                "query": file_patterns_to_add
-            }
-        })
+        result_manager.add_result(
+            content=f"All specified files are already in the exclude list.",
+            meta={"action": "exclude_files", "input": {"query": file_patterns_to_add}},
+        )
         print("All specified files are already in the exclude list.")
-    
-    
+
 
 @run_in_raw_thread()
 def index_build():
@@ -2308,16 +2466,16 @@ def index_build():
     yaml_content = convert_yaml_config_to_str(yaml_config=yaml_config)
     yaml_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(yaml_file, "w",encoding="utf-8") as f:
+    with open(yaml_file, "w", encoding="utf-8") as f:
         f.write(yaml_content)
-    try:        
-        auto_coder_main(["index", "--file", yaml_file])        
+    try:
+        auto_coder_main(["index", "--file", yaml_file])
         completer.refresh_files()
     finally:
         os.remove(yaml_file)
 
 
-def get_final_config()->AutoCoderArgs:
+def get_final_config() -> AutoCoderArgs:
     conf = memory.get("conf", {})
     yaml_config = {
         "include_file": ["./base/base.yml"],
@@ -2337,7 +2495,7 @@ def get_final_config()->AutoCoderArgs:
 
     temp_yaml = os.path.join("actions", f"{uuid.uuid4()}.yml")
     try:
-        with open(temp_yaml, "w",encoding="utf-8") as f:
+        with open(temp_yaml, "w", encoding="utf-8") as f:
             f.write(convert_yaml_config_to_str(yaml_config=yaml_config))
         args = convert_yaml_to_config(temp_yaml)
     finally:
@@ -2345,18 +2503,30 @@ def get_final_config()->AutoCoderArgs:
             os.remove(temp_yaml)
     return args
 
+
 def help(query: str):
-    from autocoder.common.auto_configure import ConfigAutoTuner,MemoryConfig,AutoConfigRequest        
+    from autocoder.common.auto_configure import (
+        ConfigAutoTuner,
+        MemoryConfig,
+        AutoConfigRequest,
+    )
+
     args = get_final_config()
     product_mode = memory.get("product_mode", "lite")
     llm = get_single_llm(args.chat_model or args.model, product_mode=product_mode)
-    auto_config_tuner = ConfigAutoTuner(args=args, llm=llm, memory_config=MemoryConfig(memory=memory, save_memory_func=save_memory))
-    auto_config_tuner.tune(AutoConfigRequest(query=query))    
+    auto_config_tuner = ConfigAutoTuner(
+        args=args,
+        llm=llm,
+        memory_config=MemoryConfig(memory=memory, save_memory_func=save_memory),
+    )
+    auto_config_tuner.tune(AutoConfigRequest(query=query))
+
 
 @run_in_raw_thread()
 def index_export(path: str):
     from autocoder.common.index_import_export import export_index
     from autocoder.common.printer import Printer
+
     printer = Printer()
     project_root = os.getcwd()
     if export_index(project_root, path):
@@ -2364,16 +2534,19 @@ def index_export(path: str):
     else:
         printer.print_in_terminal("index_export_fail", path=path)
 
+
 @run_in_raw_thread()
 def index_import(path: str):
     from autocoder.common.index_import_export import import_index
     from autocoder.common.printer import Printer
+
     printer = Printer()
     project_root = os.getcwd()
     if import_index(project_root, path):
         printer.print_in_terminal("index_import_success", path=path)
     else:
         printer.print_in_terminal("index_import_fail", path=path)
+
 
 @run_in_raw_thread()
 def index_query(query: str):
@@ -2392,10 +2565,10 @@ def index_query(query: str):
     yaml_content = convert_yaml_config_to_str(yaml_config=yaml_config)
     yaml_file = os.path.join("actions", f"{uuid.uuid4()}.yml")
 
-    with open(yaml_file, "w",encoding="utf-8") as f:
+    with open(yaml_file, "w", encoding="utf-8") as f:
         f.write(yaml_content)
-    try:        
-        auto_coder_main(["index-query", "--file", yaml_file])        
+    try:
+        auto_coder_main(["index-query", "--file", yaml_file])
     finally:
         os.remove(yaml_file)
 
@@ -2424,26 +2597,25 @@ def list_files():
 
 
 def gen_and_exec_shell_command(query: str):
-    from rich.prompt import Confirm    
-    from autocoder.common.printer import Printer 
+    from rich.prompt import Confirm
+    from autocoder.common.printer import Printer
     from rich.console import Console
-    
+
     printer = Printer()
     console = Console()
     # Generate the shell script
-    shell_script = generate_shell_command(query)    
+    shell_script = generate_shell_command(query)
 
     # Ask for confirmation using rich
     if Confirm.ask(
-        printer.get_message_from_key("confirm_execute_shell_script"),
-        default=False
+        printer.get_message_from_key("confirm_execute_shell_script"), default=False
     ):
         execute_shell_command(shell_script)
     else:
         console.print(
             Panel(
                 printer.get_message_from_key("shell_script_not_executed"),
-                border_style="yellow"
+                border_style="yellow",
             )
         )
 
@@ -2484,8 +2656,7 @@ def lib_command(args: List[str]):
                     proxy_url,
                     llm_friendly_packages_dir,
                 )
-                console.print(
-                    "Successfully cloned llm_friendly_packages repository")
+                console.print("Successfully cloned llm_friendly_packages repository")
             except git.exc.GitCommandError as e:
                 console.print(f"Error cloning repository: {e}")
 
@@ -2546,8 +2717,7 @@ def lib_command(args: List[str]):
                     console.print(f"Updated remote URL to: {new_url}")
 
                 origin.pull()
-                console.print(
-                    "Successfully updated llm_friendly_packages repository")
+                console.print("Successfully updated llm_friendly_packages repository")
 
             except git.exc.GitCommandError as e:
                 console.print(f"Error updating repository: {e}")
@@ -2569,8 +2739,7 @@ def lib_command(args: List[str]):
                 table.add_row(doc)
             console.print(table)
         else:
-            console.print(
-                f"No markdown files found for package: {package_name}")
+            console.print(f"No markdown files found for package: {package_name}")
 
     else:
         console.print(f"Unknown subcommand: {subcommand}")
@@ -2578,70 +2747,85 @@ def lib_command(args: List[str]):
 
 def execute_shell_command(command: str):
     from autocoder.common.shells import execute_shell_command as shell_exec
+
     shell_exec(command)
 
 
 def conf_export(path: str):
     from autocoder.common.conf_import_export import export_conf
+
     export_conf(os.getcwd(), path)
+
 
 def conf_import(path: str):
     from autocoder.common.conf_import_export import import_conf
+
     import_conf(os.getcwd(), path)
 
+
 @run_in_raw_thread()
-def auto_command(params,query: str):
+def auto_command(params, query: str):
     """处理/auto指令"""
-    from autocoder.commands.auto_command import CommandAutoTuner, AutoCommandRequest, CommandConfig, MemoryConfig
+    from autocoder.commands.auto_command import (
+        CommandAutoTuner,
+        AutoCommandRequest,
+        CommandConfig,
+        MemoryConfig,
+    )
+
     args = get_final_config()
     # help(query)
 
     # 准备请求参数
-    request = AutoCommandRequest(
-        user_input=query        
-    )
+    request = AutoCommandRequest(user_input=query)
 
     # 初始化调优器
-    llm = get_single_llm(args.chat_model or args.model,product_mode=args.product_mode)    
-    tuner = CommandAutoTuner(llm, 
-                             args=args,
-                             memory_config=MemoryConfig(memory=memory, save_memory_func=save_memory), 
-                             command_config=CommandConfig(
-                                 add_files=add_files,
-                                 remove_files=remove_files,
-                                 list_files=list_files,
-                                 conf=configure,
-                                 revert=revert,
-                                 commit=commit,
-                                 help=help,
-                                 exclude_dirs=exclude_dirs,
-                                 exclude_files=exclude_files,
-                                 ask=ask,
-                                 chat=chat,
-                                 coding=coding,
-                                 design=design,
-                                 summon=summon,
-                                 lib=lib_command,
-                                 mcp=mcp,
-                                 models=manage_models,
-                                 index_build=index_build,
-                                 index_query=index_query,  
-                                 execute_shell_command=execute_shell_command,  
-                                 generate_shell_command=generate_shell_command,
-                                 conf_export=conf_export,
-                                 conf_import=conf_import,
-                                 index_export=index_export,
-                                 index_import=index_import                                                                                       
-                             ))
+    llm = get_single_llm(args.chat_model or args.model, product_mode=args.product_mode)
+    tuner = CommandAutoTuner(
+        llm,
+        args=args,
+        memory_config=MemoryConfig(memory=memory, save_memory_func=save_memory),
+        command_config=CommandConfig(
+            add_files=add_files,
+            remove_files=remove_files,
+            list_files=list_files,
+            conf=configure,
+            revert=revert,
+            commit=commit,
+            help=help,
+            exclude_dirs=exclude_dirs,
+            exclude_files=exclude_files,
+            ask=ask,
+            chat=chat,
+            coding=coding,
+            design=design,
+            summon=summon,
+            lib=lib_command,
+            mcp=mcp,
+            models=manage_models,
+            index_build=index_build,
+            index_query=index_query,
+            execute_shell_command=execute_shell_command,
+            generate_shell_command=generate_shell_command,
+            conf_export=conf_export,
+            conf_import=conf_import,
+            index_export=index_export,
+            index_import=index_import,
+        ),
+    )
 
     # 生成建议
     response = tuner.analyze(request)
     printer = Printer()
     # 显示建议
-    console = Console()        
-    console.print(Panel(
-        Markdown(response.reasoning or ""),
-        title=printer.get_message_from_key_with_format("auto_command_reasoning_title"),
-        border_style="blue",
-        padding=(1, 2)
-    ))    
+    console = Console()
+    console.print(
+        Panel(
+            Markdown(response.reasoning or ""),
+            title=printer.get_message_from_key_with_format(
+                "auto_command_reasoning_title"
+            ),
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
