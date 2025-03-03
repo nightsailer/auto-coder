@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=./autocoder-schema.json
+
+cmd: /coding
+content: |
+  这里你可以输入了 @component

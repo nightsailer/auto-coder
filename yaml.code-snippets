@@ -1,0 +1,22 @@
+{
+    "@Reference": {
+        "scope": "yaml",
+        "prefix": "@",
+        "body": [
+            "${1|@user,@file,@var,@function,@class,@model,@service,@component|}"
+        ],
+        "description": "Insert a single @ reference",
+        "isFileTemplate": true,
+        "includeIf": "autocoder_input.yaml"
+    },
+    "@@Reference": {
+        "scope": "yaml",
+        "prefix": "@@",
+        "body": [
+            "${1|@@include,@@import,@@env,@@config,@@global,@@template,@@script,@@plugin|}"
+        ],
+        "description": "Insert a double @@ reference",
+        "isFileTemplate": true,
+        "includeIf": "autocoder_input.yaml"
+    }
+}

@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": [
+        "cmd",
+        "content"
+    ],
+    "definitions": {
+        "singleAtSymbols": {
+            "$ref": "./symbols/single-at-symbols.json"
+        },
+        "doubleAtSymbols": {
+            "$ref": "./symbols/double-at-symbols.json"
+        }
+    },
+    "properties": {
+        "cmd": {
+            "type": "string",
+            "enum": [
+                "/ask",
+                "/chat",
+                "/chat/new",
+                "/coding",
+                "/coding/apply"
+            ],
+            "description": "Command to execute"
+        },
+        "content": {
+            "type": "string",
+            "description": "Main content text to query with ai"
+        },
+        "references": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {
+                        "$ref": "#/definitions/singleAtSymbols"
+                    },
+                    {
+                        "$ref": "#/definitions/doubleAtSymbols"
+                    }
+                ]
+            },
+            "description": "List of references to use in the query"
+        }
+    }
+}
