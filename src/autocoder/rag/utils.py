@@ -86,6 +86,7 @@ def process_file_in_multi_process(
     except (BaseException, Exception) as e:
         logger.error(f"Error processing file {file_path}: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
+        traceback.print_exc()
         return []
 
 
