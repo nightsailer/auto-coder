@@ -74,6 +74,9 @@ wc -l src/autocoder/[module].py src/autocoder_slim/[module].py
 - [ ] 仅导入路径发生变化
 - [ ] 无语法错误
 - [ ] 基础导入测试通过
+- [ ] **__init__.py内容完整性** (CRITICAL)
+- [ ] **包级导入符号验证** (新增)
+- [ ] **导出符号对比测试** (新增)
 
 ### RULE-012: 批量迁移标准
 
@@ -87,6 +90,39 @@ cp -r src/autocoder/[directory]/ src/autocoder_slim/[directory]/
 find src/autocoder_slim/[directory]/ -name "*.py" -exec sed -i '' 's/from autocoder\./from autocoder_slim\./g' {} \;
 find src/autocoder_slim/[directory]/ -name "*.py" -exec sed -i '' 's/import autocoder\./import autocoder_slim\./g' {} \;
 ```
+
+### RULE-013: __init__.py文件特殊处理 (CRITICAL)
+
+**发现背景**: 2025-06-22人工复核发现__init__.py文件迁移不完整导致导入失败
+
+**强制要求**：
+- **内容1:1迁移**: __init__.py文件必须完整复制，不能创建空文件
+- **导入路径更新**: 所有内部导入路径必须更新为autocoder_slim
+- **符号验证**: 验证所有导出符号在新包中可用
+
+**标准流程**：
+```bash
+# 1. 检查原始文件是否非空
+if [ -s src/autocoder/[path]/__init__.py ]; then
+    # 2. 1:1复制内容
+    cp src/autocoder/[path]/__init__.py src/autocoder_slim/[path]/__init__.py
+    
+    # 3. 更新导入路径
+    sed -i '' 's/from autocoder\./from autocoder_slim\./g' src/autocoder_slim/[path]/__init__.py
+    sed -i '' 's/import autocoder\./import autocoder_slim\./g' src/autocoder_slim/[path]/__init__.py
+    
+    # 4. 验证行数一致
+    wc -l src/autocoder/[path]/__init__.py src/autocoder_slim/[path]/__init__.py
+fi
+```
+
+**验证要求**：
+- [ ] 行数完全一致 (允许导入路径修改导致的微小差异)
+- [ ] 所有导出符号可用：`python -c "from autocoder_slim.[module] import *"`
+- [ ] 包级导入测试通过
+- [ ] 与原始包导出符号对比一致
+
+**违反后果**: 导致基础设施问题，影响所有模块导入，必须立即修复
 
 ---
 
@@ -391,8 +427,9 @@ sed -i '' 's/from autocoder\./from autocoder_slim\./g' src/autocoder_slim/common
 
 | 日期 | 版本 | 变更内容 | 责任人 |
 |------|------|----------|---------|
-| 2024-12-XX | v1.0 | 初始规则文件创建，基于Phase 1-3经验总结 | AI Assistant |
-| 2024-12-XX | v1.1 | 工具解析器优化成功，达成100%成功率，记录智能Stub策略 | AI Assistant |
+| 2025-06-22 | 20250622-base | 初始规则文件创建，基于Phase 1-3经验总结 | AI Assistant |
+| 2025-06-22 | 20250622 | 工具解析器优化成功，达成100%成功率，记录智能Stub策略 | AI Assistant |
+| 2025-06-22 | 20250622-critical | 发现__init__.py文件缺失问题，新增RULE-013和验证要求 | AI Assistant |
 
 ---
 
