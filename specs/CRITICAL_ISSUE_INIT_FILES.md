@@ -80,7 +80,7 @@ src/autocoder/rag/tools/__init__.py              → 9行
 
 ## 🛠️ 解决方案
 
-### 🚀 Phase 1: 紧急修复 (2-3天)
+### 🚀 Phase 1: 紧急修复
 
 #### 1.1 全面审计
 ```bash
@@ -117,7 +117,7 @@ sed -i '' 's/import autocoder\./import autocoder_slim\./g' src/autocoder_slim/ut
 wc -l src/autocoder/utils/__init__.py src/autocoder_slim/utils/__init__.py
 ```
 
-### 🔧 Phase 2: 验证增强 (1天)
+### 🔧 Phase 2: 验证增强
 
 #### 2.1 导入完整性测试
 ```python
@@ -206,4 +206,3 @@ def compare_init_exports():
 **报告编写**: AI Assistant  
 **问题发现**: 用户人工复核  
 **修复优先级**: P0-CRITICAL  
-**预期修复时间**: 2-3天  
